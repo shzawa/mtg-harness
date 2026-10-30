@@ -59,18 +59,16 @@ async function closeWithoutConfirmation(page) {
   assert.deepEqual(dialogs, [], 'The extension must not request confirmation here');
 }
 
-async function cancelNavigation(page, navigate) {
+async function cancelNavigation(page, triggerNavigation) {
   const handledDialog = page.waitForEvent('dialog', { timeout: eventTimeout })
     .then(async (dialog) => {
       const type = dialog.type();
       await dialog.dismiss();
       assert.equal(type, 'beforeunload');
     });
-  // Playwright and Chromium can report the canceled navigation differently.
-  const navigation = navigate().catch((error) => {
-    assert.match(error.message, /net::ERR_ABORTED|navigation cancelled by beforeunload dialog/);
-  });
-  await Promise.all([handledDialog, navigation]);
+  // Trigger the document API directly: a canceled navigation has no load event
+  // for page.reload()/page.goto() to wait for. Unexpected failures still reject.
+  await Promise.all([handledDialog, triggerNavigation()]);
 }
 
 describe('Meet Tab Guard built Chrome extension', { concurrency: false }, () => {
@@ -121,10 +119,11 @@ describe('Meet Tab Guard built Chrome extension', { concurrency: false }, () => 
     const page = await openPage(url);
     await page.evaluate(() => { window.fixtureMarker = 'original document'; });
 
-    await cancelNavigation(page, () => page.reload({ timeout: eventTimeout }));
+    await cancelNavigation(page, () => page.evaluate(() => window.location.reload()));
+    assert.equal(page.url(), url);
     assert.equal(await page.evaluate(() => window.fixtureMarker), 'original document');
 
-    await cancelNavigation(page, () => page.goto('https://example.com/away', { timeout: eventTimeout }));
+    await cancelNavigation(page, () => page.evaluate(() => window.location.assign('https://example.com/away')));
     assert.equal(page.url(), url);
     assert.equal(await page.evaluate(() => window.fixtureMarker), 'original document');
   });
