@@ -2,6 +2,25 @@ packages:
   - .
 
 saveExact: true
+pmOnFail: error
+engineStrict: true
 
+# Apply supply-chain checks to new resolutions and existing lockfile entries.
+minimumReleaseAge: 2880 # 48 hours, in minutes
+minimumReleaseAgeStrict: true
+minimumReleaseAgeIgnoreMissingTime: false
+trustPolicy: no-downgrade
+trustLockfile: false
+blockExoticSubdeps: true
+
+# Unreviewed dependency lifecycle scripts must fail installation.
+strictDepBuilds: true
 allowBuilds:
   fsevents: false
+
+# Recheck installs and refuse scripts when dependencies are out of date.
+optimisticRepeatInstall: false
+verifyDepsBeforeRun: error
+verifyStoreIntegrity: true
+strictStorePkgContentCheck: true
+strictSsl: true

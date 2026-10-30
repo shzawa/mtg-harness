@@ -34,6 +34,7 @@ jobs:
           cache: pnpm
           cache-dependency-path: pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
+      - run: pnpm audit --audit-level high
       - run: node scripts/release.ts --metadata
       - run: pnpm format:check
       - run: pnpm lint

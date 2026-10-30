@@ -17,6 +17,8 @@ Google Meet の対象ページを誤って閉じてしまい、会議から離�
 
 Node.js 24 以上と pnpm が必要です。pnpm のバージョンは `packageManager` で固定しています。CI 用スクリプトは Node.js 標準の TypeScript 実行機能で、テストは Vitest で実行します。
 
+pnpm のバージョンが一致しない場合は停止します。固定したバージョンを明示的にインストールしてから実行してください。
+
 ```sh
 gh repo clone shzawa/mtg-harness
 cd mtg-harness
@@ -76,6 +78,21 @@ lint は [Oxlint](https://oxc.rs/docs/guide/usage/linter.html)、format は [Oxf
 
 開発用フォルダは `.output/chrome-mv3-dev` です。拡張の動作確認には、本番ビルドの `.output/chrome-mv3` を使ってください。
 
+## 依存パッケージの安全性
+
+`pnpm-workspace.yaml` に次のポリシーを設定しています。
+
+- 直接・間接依存とも公開から48時間未満のバージョンを拒否します。公開日時を確認できない場合も停止し、既存の lockfile も検査します。
+- 過去の公開に比べて provenance や trusted publishing などの信頼性が下がったバージョンを拒否します。間接依存の Git／任意 URL からの取得も制限します。
+- 未承認の依存パッケージの install スクリプトがあると停止します。`fsevents` のビルドは明示的に禁止し、実行を許可した依存パッケージはありません。プロジェクト自身の `postinstall`（`wxt prepare`）は実行します。
+- ストアの整合性を確認し、インストールの省略を無効にしています。依存状態が古いままの `pnpm run`／`pnpm exec` は停止するため、先に `pnpm install --frozen-lockfile` を実行してください。
+
+新しい依存に install スクリプトが必要な場合は、対象バージョンとスクリプトを確認してから `allowBuilds` に個別の許可を追加してください。更新が48時間の待機期間に該当した場合は、待機後に再実行します。これらはリスクを下げる仕組みであり、パッケージの安全性を保証するものではありません。設定の詳細は [pnpm のサプライチェーン対策](https://pnpm.io/supply-chain-security)を参照してください。
+
+CI は `pnpm audit --audit-level high` で High／Critical の既知の脆弱性が見つかると停止します。低い重大度も含めて確認するには `pnpm audit` を実行します。監査の通信エラーや修正版のない問題を一括で無視する設定は使っていません。
+
+2026-10-30 の監査では、開発依存の `deepmerge` に修正版未公開の Low が1件あります（[GHSA-gcqx-w48m-w2h4](https://github.com/advisories/GHSA-gcqx-w48m-w2h4)）。除外リストには登録していません。
+
 ## テスト
 
 ```sh
@@ -90,7 +107,7 @@ pnpm test
 
 `pnpm test:release` で Release テストだけを、ビルド後の `pnpm test:e2e` でブラウザテストだけを実行できます。
 
-GitHub Actions でも format・lint・型検査・ビルド・ブラウザテスト・ZIP 作成を実行します。成功した実行の `chrome-extension` アーティファクトから、ビルド済み拡張をダウンロードできます。
+GitHub Actions でも依存パッケージの監査・format・lint・型検査・ビルド・ブラウザテスト・ZIP 作成を実行します。成功した実行の `chrome-extension` アーティファクトから、ビルド済み拡張をダウンロードできます。
 
 実際の URL で参加前のページを確認する場合は、CI を手動実行して `live_url` を指定します。これは通信を差し替えずにページを開き、URL、操作後の確認、キャンセル後のタブ維持を検証します。会議への参加や、マイク・カメラへのアクセス許可は行いません。会議参加中の接続維持は別途確認が必要です。
 
@@ -102,7 +119,7 @@ gh workflow run ci.yml -f live_url='https://meet.google.com/meet/your-meeting-co
 
 ## バージョン更新と自動 Release
 
-`package.json` のバージョンを増やして `main` に push すると、format・lint・型検査・Release 処理のテスト・Chromium のブラウザテストを通過した後に、`v<version>` タグと GitHub Release を自動作成します。Release には、その CI でテストしたビルドの ZIP が添付されます。
+`package.json` のバージョンを増やして `main` に push すると、依存パッケージの監査・format・lint・型検査・Release 処理のテスト・Chromium のブラウザテストを通過した後に、`v<version>` タグと GitHub Release を自動作成します。Release には、その CI でテストしたビルドの ZIP が添付されます。
 
 バージョンの更新には、次のコマンドを使います。
 
