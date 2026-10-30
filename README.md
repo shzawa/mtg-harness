@@ -89,6 +89,7 @@ pnpm zip       # 配布用 ZIP を .output/ に作成
 pnpm lint:fix  # Oxlint の自動修正
 pnpm format    # Oxfmt で整形
 pnpm typecheck # 型検査
+pnpm actions:check # Actions の SHA・完全バージョン指定を検査
 ```
 
 lint は [Oxlint](https://oxc.rs/docs/guide/usage/linter.html)、format は [Oxfmt](https://oxc.rs/docs/guide/usage/formatter.html) を使用します。型検査は WXT 用と Node.js 用の TypeScript 設定で行います。
@@ -140,6 +141,16 @@ pnpm test
 GitHub Actions でも同じ `bin/mise` と `mise.lock` でツールを取得し、依存パッケージの監査・format・lint・型検査・ビルド・ブラウザテスト・ZIP 作成を実行します。成功した実行の `chrome-extension` アーティファクトから、ビルド済み拡張をダウンロードできます。
 
 CI では静的検査・単体テスト、OS 依存の更新・導入、Chromium の取得を並列に実行し、すべての成功を待ってからビルドとブラウザテストへ進みます。インストール済みツール・依存・ブラウザのキャッシュは使わず、固定バージョンの検証と OS 依存の更新を毎回行います。
+
+GitHub Actions の外部参照は、40桁のコミット SHA と、同じ行の完全な安定版バージョン表記（`# v6.1.0` など）を必須にしています。`@v6`・`@v6.1`・タグだけの参照・SHA とバージョンの不一致は許可しません。
+
+```yaml
+- uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+```
+
+`pnpm actions:check`（`pnpm check` にも含む）で全ワークフローとローカルの `action.yml`／`action.yaml` を検査します。CI は `pnpm actions:check --verify-upstream` で公式タグが指すコミットとの一致も確認し、取得エラーでも停止します。更新時は SHA と完全バージョン表記を一緒に変更して検証してください。
+
+再利用ワークフローとローカル composite action 内の外部参照も対象です。ローカルの `./` 参照は同一リポジトリのコードとして検査します。実行定義での YAML の別名・merge キーと Docker action は、現在のポリシーでは許可しません。リポジトリ設定でも `Require actions to be pinned to a full-length commit SHA` を有効にしています。
 
 実際の URL で参加前のページを確認する場合は、CI を手動実行して `live_url` を指定します。これは通信を差し替えずにページを開き、URL、操作後の確認、キャンセル後のタブ維持を検証します。会議への参加や、マイク・カメラへのアクセス許可は行いません。会議参加中の接続維持は別途確認が必要です。
 

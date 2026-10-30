@@ -26,7 +26,7 @@ jobs:
     outputs:
       release_needed: ${{ steps.release-plan.outputs.release_needed }}
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
       - name: Install pinned toolchain
         env:
           MISE_GITHUB_TOKEN: ${{ github.token }}
@@ -34,6 +34,10 @@ jobs:
           ./bin/mise install --locked
           ./bin/mise env --paths >> "$GITHUB_PATH"
       - run: pnpm install --frozen-lockfile
+      - name: Verify full action versions against upstream tags
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: pnpm actions:check --verify-upstream
       - run: node scripts/release.ts --metadata
       - name: Plan release without write permissions
         id: release-plan
@@ -92,7 +96,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           ref: ${{ github.sha }}
           persist-credentials: false

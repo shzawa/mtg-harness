@@ -14,7 +14,8 @@
     "lint:fix": "oxlint --fix --deny-warnings",
     "format": "oxfmt --write",
     "format:check": "oxfmt --check",
-    "check": "pnpm audit --audit-level high && pnpm format:check && pnpm lint && pnpm typecheck && pnpm test:release",
+    "actions:check": "node scripts/check-actions.ts",
+    "check": "pnpm actions:check && pnpm audit --audit-level high && pnpm format:check && pnpm lint && pnpm typecheck && pnpm test:release",
     "typecheck": "tsc --noEmit && tsc --project tsconfig.node.json",
     "test": "pnpm test:release && pnpm build && pnpm test:e2e",
     "test:release": "vitest run --project release",
@@ -32,7 +33,8 @@
     "vite": "8.3.5",
     "vitest": "5.0.5",
     "web-ext": "10.8.0",
-    "wxt": "0.21.5"
+    "wxt": "0.21.5",
+    "yaml": "2.9.1"
   },
   "engines": {
     "node": ">=24"
