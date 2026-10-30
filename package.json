@@ -1,13 +1,15 @@
 {
   "name": "mtg-harness",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "private": true,
   "description": "Google Meet の /meet/ で始まるページの誤った閉鎖を防ぐブラウザ拡張",
+  "license": "MIT",
   "type": "module",
   "scripts": {
     "dev": "wxt",
     "build": "wxt build",
     "zip": "wxt zip",
+    "license:check": "node scripts/licenses.ts",
     "lint": "oxlint --deny-warnings",
     "lint:fix": "oxlint --fix --deny-warnings",
     "format": "oxfmt --write",

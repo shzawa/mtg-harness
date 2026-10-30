@@ -37,6 +37,7 @@ jobs:
       - run: ./bin/mise exec -- pnpm typecheck
       - run: ./bin/mise exec -- pnpm test:release
       - run: ./bin/zip
+      - run: ./bin/mise exec -- pnpm license:check
       - run: ./bin/mise exec -- pnpm exec playwright install --with-deps chromium
       - run: ./bin/mise exec -- pnpm test:e2e
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

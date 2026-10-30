@@ -7,7 +7,7 @@ export default defineConfig({
         test: {
           name: 'release',
           environment: 'node',
-          include: ['tests/release.test.ts'],
+          include: ['tests/release.test.ts', 'tests/licenses.test.ts'],
         },
       },
       {

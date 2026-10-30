@@ -145,6 +145,20 @@ CI が失敗した場合は Release を公開しません。ZIP が未添付の�
 
 退出後の画面かを判定するため、対象ページの `h1` の表示テキストを読み取ります。音声・カメラの取得、データの保存、外部への送信はありません。`tabs` や `<all_urls>` などの追加権限も使いません。開発モードでは WXT の開発用通信が加わるため、配布には本番ビルドを使ってください。
 
+## ライセンス
+
+このプロジェクトは [MIT License](LICENSE) です。リポジトリに含まれる mise 生成スクリプトのライセンスは、[第三者コードの表記](THIRD_PARTY_NOTICES.md)に記載しています。
+
+ビルド済み拡張と配布 ZIP には、プロジェクトの `LICENSE` と、実際にバンドルされた依存情報から Vite が生成する `THIRD_PARTY_NOTICES.txt`・`THIRD_PARTY_LICENSES.json` を同梱します。
+
+CI は `pnpm license:check` で ZIP 内の全文表記を確認します。バンドルされる依存の追加・バージョン・ライセンス・本文が変わった場合はビルドを止めるため、上流のライセンスを確認し、`scripts/licenses.ts` の承認情報と `licenses/` の正本を更新してください。
+
+開発依存を含むインストール済みパッケージ全体のライセンス情報は、次のコマンドで確認できます。この一覧は配布バンドルに含まれるパッケージの一覧とは異なります。
+
+```sh
+./bin/mise exec -- pnpm licenses list --json
+```
+
 ## 参考資料
 
 - [MDN: beforeunload](https://developer.mozilla.org/en-US/docs/Web/API/Window/beforeunload_event)
