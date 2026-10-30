@@ -4,6 +4,15 @@ Google Meet の対象ページを誤って閉じてしまい、会議から離�
 
 [WXT](https://wxt.dev/) と TypeScript を使用しています。
 
+## インストール（ビルド不要）
+
+1. [最新の Release](https://github.com/shzawa/meet-tab-guard/releases/latest) から `meet-tab-guard-<version>-chrome.zip` をダウンロードし、解凍します。
+2. 解凍したフォルダを保管したい場所へ移動します。インストール後も削除しないでください。
+3. `chrome://extensions`（Edge は `edge://extensions`）で「デベロッパー モード」をオンにし、「パッケージ化されていない拡張機能を読み込む」から `manifest.json` が入っているフォルダを選びます。
+4. すでに開いている対象の Meet タブは、会議参加前に再読み込みします。
+
+自動更新はありません。更新時は保管したフォルダの中身を新しい ZIP の中身で置き換え、拡張管理画面で拡張を再読み込みしてください。
+
 ## セットアップとビルド
 
 Node.js 22.12.0 以上（推奨: 24）と npm が必要です。
@@ -55,6 +64,7 @@ npm run dev        # 開発ビルドとブラウザ起動
 npm run typecheck  # TypeScript の型検査
 npm run build      # Chrome/Edge 向け Manifest V3 ビルド
 npm run zip        # 配布用 ZIP を .output/ に作成
+npm run test:release # Release 処理のテスト
 ```
 
 開発用フォルダは `.output/chrome-mv3-dev` です。拡張の動作確認には、本番ビルドの `.output/chrome-mv3` を使ってください。
@@ -78,6 +88,25 @@ gh workflow run ci.yml -f live_url='https://meet.google.com/meet/your-meeting-co
 ```
 
 結果の JSON とスクリーンショットは、その実行の `live-meet-verification` アーティファクトに保存されます。
+
+## バージョン更新と自動 Release
+
+`package.json` のバージョンを増やして `main` に push すると、型検査・Release 処理のテスト・Chromium のブラウザテストを通過した後に、`v<version>` タグと GitHub Release を自動作成します。Release には、その CI でテストしたビルドの ZIP が添付されます。
+
+バージョンとロックファイルを同時に更新するには、次のコマンドを使います。
+
+```sh
+npm version patch --no-git-tag-version
+git add package.json package-lock.json
+git commit -m "chore: bump extension version"
+git push origin main
+```
+
+マイナー更新は `patch` を `minor` に、メジャー更新は `major` に変更します。対応するバージョン形式は `1.0.0` のような3つの数値です。タグはテスト成功後に CI が作成するため、ローカルでタグを作る必要はありません。
+
+同じバージョンの公開済み Release は上書きしません。バージョンを変えない通常のコミットでは Release は増えず、バージョンを下げて未発行の Release を作る操作は失敗します。初回は現在の `1.0.0` を発行します。
+
+CI が失敗した場合は Release を公開しません。ZIP が未添付の下書きが残った場合は、同じコミットの CI を再実行すると、添付と公開を再開できます。不完全な同名ファイルが残っている場合は、上書きせず停止します。公開には GitHub Actions 標準の `GITHUB_TOKEN` を使用し、追加のシークレット設定は不要です。
 
 ## サイトへのアクセス
 
