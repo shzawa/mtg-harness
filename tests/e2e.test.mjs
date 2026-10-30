@@ -71,10 +71,10 @@ async function cancelNavigation(page, triggerNavigation) {
   await Promise.all([handledDialog, triggerNavigation()]);
 }
 
-describe('Meet Tab Guard built Chrome extension', { concurrency: false }, () => {
+describe('MTG Harness built Chrome extension', { concurrency: false }, () => {
   before(async () => {
     await access(join(extensionPath, 'manifest.json'));
-    profilePath = await mkdtemp(join(tmpdir(), 'meet-tab-guard-e2e-'));
+    profilePath = await mkdtemp(join(tmpdir(), 'mtg-harness-e2e-'));
     context = await chromium.launchPersistentContext(profilePath, {
       channel: 'chromium',
       headless: true,

@@ -1,12 +1,12 @@
-# Meet Tab Guard
+# MTG Harness
 
-Google Meet の対象ページを誤って閉じてしまい、会議から離脱することを防ぐ Chrome／Edge 向けブラウザ拡張です。タブを閉じる前にブラウザ標準の確認を表示し、キャンセルするとタブに残れます。
+Google Meet の対象ページを誤って閉じてしまい、会議から離脱することを防ぐ Chrome／Edge 向けブラウザ拡張です。ページ内を一度操作した後、タブを閉じる前にブラウザ標準の確認を表示します。キャンセルするとタブに残れます。
 
 [WXT](https://wxt.dev/) と TypeScript を使用しています。
 
 ## インストール（ビルド不要）
 
-1. [最新の Release](https://github.com/shzawa/meet-tab-guard/releases/latest) から `meet-tab-guard-<version>-chrome.zip` をダウンロードし、解凍します。
+1. [最新の Release](https://github.com/shzawa/mtg-harness/releases/latest) から `mtg-harness-<version>-chrome.zip` をダウンロードし、解凍します。
 2. 解凍したフォルダを保管したい場所へ移動します。インストール後も削除しないでください。
 3. `chrome://extensions`（Edge は `edge://extensions`）で「デベロッパー モード」をオンにし、「パッケージ化されていない拡張機能を読み込む」から `manifest.json` が入っているフォルダを選びます。
 4. すでに開いている対象の Meet タブは、会議参加前に再読み込みします。
@@ -18,8 +18,8 @@ Google Meet の対象ページを誤って閉じてしまい、会議から離�
 Node.js 22.12.0 以上（推奨: 24）と npm が必要です。
 
 ```sh
-gh repo clone shzawa/meet-tab-guard
-cd meet-tab-guard
+gh repo clone shzawa/mtg-harness
+cd mtg-harness
 npm ci
 npm run build
 ```
@@ -104,7 +104,7 @@ git push origin main
 
 マイナー更新は `patch` を `minor` に、メジャー更新は `major` に変更します。対応するバージョン形式は `1.0.0` のような3つの数値です。タグはテスト成功後に CI が作成するため、ローカルでタグを作る必要はありません。
 
-同じバージョンの公開済み Release は上書きしません。バージョンを変えない通常のコミットでは Release は増えず、バージョンを下げて未発行の Release を作る操作は失敗します。初回は現在の `1.0.0` を発行します。
+同じバージョンの公開済み Release は上書きしません。バージョンを変えない通常のコミットでは Release は増えず、バージョンを下げて未発行の Release を作る操作は失敗します。
 
 CI が失敗した場合は Release を公開しません。ZIP が未添付の下書きが残った場合は、同じコミットの CI を再実行すると、添付と公開を再開できます。不完全な同名ファイルが残っている場合は、上書きせず停止します。公開には GitHub Actions 標準の `GITHUB_TOKEN` を使用し、追加のシークレット設定は不要です。
 

@@ -90,7 +90,7 @@ try {
   report.requestedUrl = urlWithoutQuery(requested.href);
   const manifest = JSON.parse(await readFile(join(extensionPath, 'manifest.json'), 'utf8'));
   report.extension = { name: manifest.name, version: manifest.version, contentScripts: manifest.content_scripts };
-  profilePath = await mkdtemp(join(tmpdir(), 'meet-tab-guard-live-'));
+  profilePath = await mkdtemp(join(tmpdir(), 'mtg-harness-live-'));
   context = await chromium.launchPersistentContext(profilePath, {
     ...browserOptions,
     ignoreDefaultArgs: ['--disable-extensions'],
@@ -140,7 +140,7 @@ try {
 
   // A fresh control profile checks whether the site already prompts by itself.
   report.control = { extensionEnabled: false, dialogTypes: [] };
-  controlProfilePath = await mkdtemp(join(tmpdir(), 'meet-tab-guard-live-control-'));
+  controlProfilePath = await mkdtemp(join(tmpdir(), 'mtg-harness-live-control-'));
   controlContext = await chromium.launchPersistentContext(controlProfilePath, {
     ...browserOptions,
     args: ['--deny-permission-prompts'],

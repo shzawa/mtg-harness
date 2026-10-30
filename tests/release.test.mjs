@@ -10,7 +10,7 @@ import { metadata, parseVersion, release } from '../scripts/release.mjs';
 const sha = 'a'.repeat(40);
 const otherSha = 'b'.repeat(40);
 const tag = 'v1.0.0';
-const assetName = 'meet-tab-guard-1.0.0-chrome.zip';
+const assetName = 'mtg-harness-1.0.0-chrome.zip';
 const uploadedAsset = { name: assetName, state: 'uploaded', size: 42 };
 const http = (body, status = 200) => ({
   status: status < 400 ? 0 : 1,
@@ -19,9 +19,9 @@ const http = (body, status = 200) => ({
 });
 
 function fixture(t, options = {}) {
-  const cwd = mkdtempSync(join(tmpdir(), 'meet-tab-guard-release-test-'));
+  const cwd = mkdtempSync(join(tmpdir(), 'mtg-harness-release-test-'));
   t.after(() => rmSync(cwd, { recursive: true, force: true }));
-  writeFileSync(join(cwd, 'package.json'), JSON.stringify({ version: '1.0.0' }));
+  writeFileSync(join(cwd, 'package.json'), JSON.stringify({ name: 'mtg-harness', version: '1.0.0' }));
   mkdirSync(join(cwd, 'release-assets'));
   const zip = join(cwd, 'release-assets', assetName);
   writeFileSync(zip, 'fake ZIP; unzip output is supplied by the process runner');

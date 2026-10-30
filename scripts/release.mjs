@@ -16,9 +16,9 @@ export function parseVersion(version) {
 }
 
 export function metadata(cwd = process.cwd()) {
-  const { version } = JSON.parse(readFileSync(join(cwd, 'package.json'), 'utf8'));
+  const { name, version } = JSON.parse(readFileSync(join(cwd, 'package.json'), 'utf8'));
   parseVersion(version);
-  return { version, tag: `v${version}`, asset: `meet-tab-guard-${version}-chrome.zip` };
+  return { version, tag: `v${version}`, asset: `${name}-${version}-chrome.zip` };
 }
 
 function defaultRunner(command, args) {
@@ -26,7 +26,7 @@ function defaultRunner(command, args) {
 }
 
 function notes(version, asset) {
-  return `# Meet Tab Guard ${version}
+  return `# MTG Harness ${version}
 
 Google Meet の /meet/ で始まるページを閉じる前に、ブラウザ標準の確認を表示します。
 
@@ -124,7 +124,7 @@ export function release({ cwd = process.cwd(), env = process.env, run = defaultR
   } else {
     api(`${base}/git/refs`, { method: 'POST', fields: ['-f', `ref=refs/tags/${tag}`, '-f', `sha=${sha}`] });
   }
-  const temp = mkdtempSync(join(tmpdir(), 'meet-tab-guard-release-'));
+  const temp = mkdtempSync(join(tmpdir(), 'mtg-harness-release-'));
   try {
     if (!existing) {
       const notesFile = join(temp, 'release-notes.md');
