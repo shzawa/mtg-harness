@@ -6,7 +6,7 @@ Google Meet の対象ページを誤って閉じてしまい、会議から離�
 
 ## セットアップとビルド
 
-Node.js 22 以上（推奨: 24）と npm が必要です。
+Node.js 22.12.0 以上（推奨: 24）と npm が必要です。
 
 ```sh
 gh repo clone shzawa/meet-tab-guard
