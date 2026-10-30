@@ -1,5 +1,17 @@
 # MTG Harness
 
+[![CI](https://github.com/shzawa/mtg-harness/actions/workflows/ci.yml/badge.svg?branch=main&event=push)](https://github.com/shzawa/mtg-harness/actions/workflows/ci.yml)
+[![Dependency audit](https://github.com/shzawa/mtg-harness/actions/workflows/dependency-audit.yml/badge.svg?branch=main)](https://github.com/shzawa/mtg-harness/actions/workflows/dependency-audit.yml)
+[![Release](https://img.shields.io/github/v/release/shzawa/mtg-harness?logo=github)](https://github.com/shzawa/mtg-harness/releases/latest)
+[![License](https://img.shields.io/github/license/shzawa/mtg-harness?color=blue)](https://github.com/shzawa/mtg-harness/blob/main/LICENSE)
+
+[![WXT](https://img.shields.io/badge/WXT-67D55E?logo=wxt&logoColor=white)](https://wxt.dev/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![pnpm](https://img.shields.io/badge/pnpm-F69220?logo=pnpm&logoColor=white)](https://pnpm.io/)
+[![Oxc](https://img.shields.io/badge/Oxc-FF9159?logo=oxc&logoColor=white)](https://oxc.rs/)
+[![Vitest](https://img.shields.io/badge/Vitest-6E9F18?logo=vitest&logoColor=white)](https://vitest.dev/)
+[![Renovate](https://img.shields.io/badge/Renovate-1A1F6C?logo=renovate&logoColor=white)](https://github.com/shzawa/mtg-harness/blob/main/renovate.json)
+
 Google Meet の対象ページを誤って閉じてしまい、会議から離脱することを防ぐ Chrome／Edge 向けブラウザ拡張です。ページ内を一度操作した後、タブを閉じる前にブラウザ標準の確認を表示します。キャンセルするとタブに残れます。
 
 [WXT](https://wxt.dev/) を使い、拡張本体・CI 用スクリプト・テストを TypeScript で実装しています。
