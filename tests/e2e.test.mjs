@@ -66,9 +66,9 @@ async function cancelNavigation(page, navigate) {
       await dialog.dismiss();
       assert.equal(type, 'beforeunload');
     });
-  // Chromium rejects a navigation canceled by beforeunload with ERR_ABORTED.
+  // Playwright and Chromium can report the canceled navigation differently.
   const navigation = navigate().catch((error) => {
-    assert.match(error.message, /net::ERR_ABORTED/);
+    assert.match(error.message, /net::ERR_ABORTED|navigation cancelled by beforeunload dialog/);
   });
   await Promise.all([handledDialog, navigation]);
 }
