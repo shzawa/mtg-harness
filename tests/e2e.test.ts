@@ -11,7 +11,7 @@ type FixtureWindow = Window & { fixtureMarker?: string };
 
 const extensionPath = fileURLToPath(new URL('../.output/chrome-mv3/', import.meta.url));
 const fixture = `<!doctype html>
-<html lang="en"><head><title>Meet guard fixture</title></head>
+<html lang="en"><head><meta charset="utf-8"><title>Meet guard fixture</title></head>
 <body><button id="interact">Interact with this page</button></body></html>`;
 const eventTimeout = 5_000;
 let context: BrowserContext | undefined;
@@ -186,6 +186,7 @@ describe('MTG Harness built Chrome extension', { concurrent: false }, () => {
         '<h1 style="white-space: pre"> \n<span>ミーティングから退出しました</span>\n </h1></body>',
       ),
     });
+    expect(await page.locator('h1').textContent()).toContain('ミーティングから退出しました');
     await closeWithoutConfirmation(page);
   }, 15_000);
 
