@@ -4,7 +4,17 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { assert, expect, test, type TestContext } from 'vitest';
-import { metadata, parseVersion, release, type GitHubRelease, type GitReference, type ProcessResult, type ProcessRunner, type ReleaseEnvironment, type ZipManifest } from '../scripts/release.ts';
+import {
+  metadata,
+  parseVersion,
+  release,
+  type GitHubRelease,
+  type GitReference,
+  type ProcessResult,
+  type ProcessRunner,
+  type ReleaseEnvironment,
+  type ZipManifest,
+} from '../scripts/release.ts';
 
 interface FixtureState {
   release: Partial<GitHubRelease> | null;
@@ -34,7 +44,10 @@ const http = (body: unknown, status = 200): ProcessResult => ({
 function fixture(t: TestContext, options: Partial<FixtureState> = {}) {
   const cwd = mkdtempSync(join(tmpdir(), 'mtg-harness-release-test-'));
   t.onTestFinished(() => rmSync(cwd, { recursive: true, force: true }));
-  writeFileSync(join(cwd, 'package.json'), JSON.stringify({ name: 'mtg-harness', version: '1.0.0' }));
+  writeFileSync(
+    join(cwd, 'package.json'),
+    JSON.stringify({ name: 'mtg-harness', version: '1.0.0' }),
+  );
   mkdirSync(join(cwd, 'release-assets'));
   const zip = join(cwd, 'release-assets', assetName);
   writeFileSync(zip, 'fake ZIP; unzip output is supplied by the process runner');
@@ -61,13 +74,26 @@ function fixture(t: TestContext, options: Partial<FixtureState> = {}) {
       const method = args[args.indexOf('--method') + 1];
       assert(path && method);
       if (state.apiErrors[path]) return state.apiErrors[path];
-      if (path.endsWith('/releases/tags/v1.0.0')) return state.release && !state.release.draft ? http(state.release) : http({}, 404);
+      if (path.endsWith('/releases/tags/v1.0.0'))
+        return state.release && !state.release.draft ? http(state.release) : http({}, 404);
       if (path === 'graphql') {
-        expect(args.some((arg) => arg.includes('release(tagName:$tag){databaseId isDraft}'))).toBe(true);
+        expect(args.some((arg) => arg.includes('release(tagName:$tag){databaseId isDraft}'))).toBe(
+          true,
+        );
         expect(args).toEqual(expect.arrayContaining(['owner=owner', 'name=repo', 'tag=v1.0.0']));
-        return http({ data: { repository: { release: state.release && !state.hideDraftFromGraphql ? { databaseId: 1, isDraft: state.release.draft } : null } } });
+        return http({
+          data: {
+            repository: {
+              release:
+                state.release && !state.hideDraftFromGraphql
+                  ? { databaseId: 1, isDraft: state.release.draft }
+                  : null,
+            },
+          },
+        });
       }
-      if (path.endsWith('/releases/latest')) return state.latest ? http(state.latest) : http({}, 404);
+      if (path.endsWith('/releases/latest'))
+        return state.latest ? http(state.latest) : http({}, 404);
       if (path.endsWith('/git/ref/tags/v1.0.0')) return state.ref ? http(state.ref) : http({}, 404);
       if (path.includes('/git/tags/')) {
         const tagObjectSha = path.split('/').at(-1);
@@ -83,14 +109,28 @@ function fixture(t: TestContext, options: Partial<FixtureState> = {}) {
       }
       if (path.endsWith('/releases/1')) return http(state.release);
       if (path.endsWith('/releases') && method === 'POST') {
-        for (const field of ['tag_name=v1.0.0', `target_commitish=${sha}`, 'name=v1.0.0', 'draft=true', 'prerelease=false']) expect(args).toContain(field);
+        for (const field of [
+          'tag_name=v1.0.0',
+          `target_commitish=${sha}`,
+          'name=v1.0.0',
+          'draft=true',
+          'prerelease=false',
+        ])
+          expect(args).toContain(field);
         const notesField = args.find((arg) => arg.startsWith('body=@'));
         assert(notesField);
         const notesFile = notesField.slice('body=@'.length);
         const notes = readFileSync(notesFile, 'utf8');
         expect(notes).toContain(assetName);
         expect(notes).toContain('自動更新には対応しません');
-        state.release = { id: 1, tag_name: tag, draft: true, prerelease: false, target_commitish: sha, assets: [] };
+        state.release = {
+          id: 1,
+          tag_name: tag,
+          draft: true,
+          prerelease: false,
+          target_commitish: sha,
+          assets: [],
+        };
         state.mutations.push('create');
         return http(state.createdResponse ?? state.release, 201);
       }
@@ -117,37 +157,68 @@ function fixture(t: TestContext, options: Partial<FixtureState> = {}) {
     return { status: 0, stdout: '', stderr: '' };
   };
   return {
-    cwd, zip, state,
-    publish: (env: ReleaseEnvironment = {}) => release({ cwd, env: { GITHUB_REPOSITORY: 'owner/repo', GITHUB_SHA: sha, ...env }, run, log() {} }),
+    cwd,
+    zip,
+    state,
+    publish: (env: ReleaseEnvironment = {}) =>
+      release({
+        cwd,
+        env: { GITHUB_REPOSITORY: 'owner/repo', GITHUB_SHA: sha, ...env },
+        run,
+        log() {},
+      }),
   };
 }
 
 test('metadata accepts stable Chrome versions and rejects ambiguous or unsupported versions', (t) => {
   expect(parseVersion('65535.1.0')).toEqual([65535, 1, 0]);
-  for (const version of ['0.0.0', '01.0.0', '1.02.3', '1.0', '1.0.0.0', '1.0.0-beta.1', '65536.0.0', null]) {
+  for (const version of [
+    '0.0.0',
+    '01.0.0',
+    '1.02.3',
+    '1.0',
+    '1.0.0.0',
+    '1.0.0-beta.1',
+    '65536.0.0',
+    null,
+  ]) {
     expect(() => parseVersion(version)).toThrow(/version/i);
   }
   const f = fixture(t);
   expect(metadata(f.cwd)).toEqual({ version: '1.0.0', tag, asset: assetName });
   const script = fileURLToPath(new URL('../scripts/release.ts', import.meta.url));
-  const result = spawnSync(process.execPath, [script, '--metadata'], { cwd: f.cwd, encoding: 'utf8' });
+  const result = spawnSync(process.execPath, [script, '--metadata'], {
+    cwd: f.cwd,
+    encoding: 'utf8',
+  });
   expect(result.status).toBe(0);
   expect(result.stdout).toBe('version=1.0.0\ntag=v1.0.0\n');
 });
 
 test('auth, rate-limit, server, and network failures are never treated as missing releases', (t) => {
   for (const status of [401, 403, 429, 500]) {
-    const f = fixture(t, { apiErrors: { 'repos/owner/repo/releases/tags/v1.0.0': http({}, status) } });
+    const f = fixture(t, {
+      apiErrors: { 'repos/owner/repo/releases/tags/v1.0.0': http({}, status) },
+    });
     expect(() => f.publish()).toThrow(new RegExp(`HTTP ${status}`));
     expect(f.state.mutations).toEqual([]);
   }
-  const f = fixture(t, { apiErrors: { graphql: { status: 1, stdout: '', stderr: 'network timeout' } } });
+  const f = fixture(t, {
+    apiErrors: { graphql: { status: 1, stdout: '', stderr: 'network timeout' } },
+  });
   expect(() => f.publish()).toThrow(/HTTP unknown/);
   expect(f.state.mutations).toEqual([]);
 });
 
 test('HTTP 200 GraphQL errors and an inaccessible repository cannot become a missing draft', (t) => {
-  const f = fixture(t, { apiErrors: { graphql: http({ errors: [{ message: 'Resource not accessible by integration' }], data: { repository: null } }) } });
+  const f = fixture(t, {
+    apiErrors: {
+      graphql: http({
+        errors: [{ message: 'Resource not accessible by integration' }],
+        data: { repository: null },
+      }),
+    },
+  });
   expect(() => f.publish()).toThrow(/GraphQL Release lookup failed: Resource not accessible/);
   expect(f.state.mutations).toEqual([]);
   const inaccessible = fixture(t, { apiErrors: { graphql: http({ data: { repository: null } }) } });
@@ -156,7 +227,9 @@ test('HTTP 200 GraphQL errors and an inaccessible repository cannot become a mis
 });
 
 test('published releases with the asset remain unchanged even when main has advanced', (t) => {
-  const f = fixture(t, { release: { draft: false, tag_name: tag, assets: [uploadedAsset], target_commitish: sha } });
+  const f = fixture(t, {
+    release: { draft: false, tag_name: tag, assets: [uploadedAsset], target_commitish: sha },
+  });
   rmSync(f.zip);
   expect(f.publish({ GITHUB_SHA: otherSha })).toEqual({ status: 'skipped', tag });
   expect(f.state.calls).toHaveLength(1);
@@ -167,7 +240,9 @@ test('published releases without the expected completed asset cannot be repaired
   const f = fixture(t, { release: { draft: false, tag_name: tag, assets: [] } });
   expect(() => f.publish()).toThrow(/Published.*missing/);
   expect(f.state.mutations).toEqual([]);
-  const prerelease = fixture(t, { release: { draft: false, prerelease: true, tag_name: tag, assets: [uploadedAsset] } });
+  const prerelease = fixture(t, {
+    release: { draft: false, prerelease: true, tag_name: tag, assets: [uploadedAsset] },
+  });
   expect(() => prerelease.publish()).toThrow(/only stable Releases/);
   expect(prerelease.state.mutations).toEqual([]);
 });
@@ -192,12 +267,19 @@ test('a first release creates the tested tag, draft, ZIP upload, then publishes'
   expect(f.state.mutations).toEqual(['create-tag', 'create', 'upload', 'edit']);
   expect(f.state.release?.draft).toBe(false);
   expect(f.state.ref?.object?.sha).toBe(sha);
-  expect(f.state.calls.filter((call) => call[0] === 'gh' && call.includes('graphql')), 'The created draft is verified from its API response instead of rediscovered').toHaveLength(1);
+  expect(
+    f.state.calls.filter((call) => call[0] === 'gh' && call.includes('graphql')),
+    'The created draft is verified from its API response instead of rediscovered',
+  ).toHaveLength(1);
 });
 
 test('invalid creation metadata fails with diagnostic fields before uploading or publishing', (t) => {
-  const f = fixture(t, { createdResponse: { id: 1, tag_name: tag, draft: true, target_commitish: otherSha } });
-  expect(() => f.publish()).toThrow(/created draft could not be verified \(id=1, draft=true, target=b{40}\)/);
+  const f = fixture(t, {
+    createdResponse: { id: 1, tag_name: tag, draft: true, target_commitish: otherSha },
+  });
+  expect(() => f.publish()).toThrow(
+    /created draft could not be verified \(id=1, draft=true, target=b{40}\)/,
+  );
   expect(f.state.mutations).toEqual(['create-tag', 'create']);
 });
 
@@ -230,9 +312,14 @@ test('same-commit draft recovery uploads only a missing asset, never clobbering 
       release: { id: 1, tag_name: tag, draft: true, target_commitish: sha, assets },
     });
     f.publish();
-    expect(f.state.mutations).toEqual(assets.length === 1 && assets[0]?.size === 9999 ? ['edit'] : ['upload', 'edit']);
+    expect(f.state.mutations).toEqual(
+      assets.length === 1 && assets[0]?.size === 9999 ? ['edit'] : ['upload', 'edit'],
+    );
     expect(f.state.calls.some((call) => call.includes('graphql'))).toBe(true);
-    expect(f.state.calls.filter((call) => call.includes('repos/owner/repo/releases/1')), 'GraphQL databaseId resolves the draft before its final publish check').toHaveLength(2);
+    expect(
+      f.state.calls.filter((call) => call.includes('repos/owner/repo/releases/1')),
+      'GraphQL databaseId resolves the draft before its final publish check',
+    ).toHaveLength(2);
   }
 });
 
@@ -247,15 +334,27 @@ test('a failed upload leaves a recoverable draft, and retry completes it without
 });
 
 test('a draft for a different commit, incomplete asset, or wrong ZIP manifest is not published', (t) => {
-  const wrongCommit = fixture(t, { release: { tag_name: tag, draft: true, target_commitish: otherSha } });
+  const wrongCommit = fixture(t, {
+    release: { tag_name: tag, draft: true, target_commitish: otherSha },
+  });
   expect(() => wrongCommit.publish()).toThrow(/Draft.*tested commit/);
   expect(wrongCommit.state.mutations).toEqual([]);
-  const incomplete = fixture(t, { ref: { object: { type: 'commit', sha } }, release: {
-    id: 1, tag_name: tag, draft: true, target_commitish: sha, assets: [{ name: assetName, state: 'starter', size: 0 }],
-  } });
+  const incomplete = fixture(t, {
+    ref: { object: { type: 'commit', sha } },
+    release: {
+      id: 1,
+      tag_name: tag,
+      draft: true,
+      target_commitish: sha,
+      assets: [{ name: assetName, state: 'starter', size: 0 }],
+    },
+  });
   expect(() => incomplete.publish()).toThrow(/incomplete ZIP/);
   expect(incomplete.state.mutations).toEqual([]);
-  for (const manifest of [{ manifest_version: 2, version: '1.0.0' }, { manifest_version: 3, version: '1.0.1' }]) {
+  for (const manifest of [
+    { manifest_version: 2, version: '1.0.0' },
+    { manifest_version: 3, version: '1.0.1' },
+  ]) {
     const f = fixture(t, { manifest });
     expect(() => f.publish()).toThrow(/ZIP manifest/);
     expect(f.state.mutations).toEqual([]);

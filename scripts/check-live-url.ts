@@ -90,9 +90,10 @@ async function closeWithDialog(targetPage: Page, decision: DialogDecision): Prom
     await dialog[decision]();
     assert.equal(type, 'beforeunload');
   });
-  const closed = decision === 'accept'
-    ? targetPage.waitForEvent('close', { timeout: 8_000 })
-    : Promise.resolve();
+  const closed =
+    decision === 'accept'
+      ? targetPage.waitForEvent('close', { timeout: 8_000 })
+      : Promise.resolve();
   await Promise.all([handled, closed, targetPage.close({ runBeforeUnload: true })]);
 }
 
@@ -100,12 +101,20 @@ async function activateNeutral(targetPage: Page): Promise<ActivationResult> {
   const viewport = targetPage.viewportSize();
   assert.ok(viewport, 'A fixed viewport is required to find a neutral activation point');
   const { width, height } = viewport;
-  for (const point of [{ x: 8, y: 8 }, { x: width - 8, y: 8 }, { x: 8, y: height - 8 }, { x: width - 8, y: height - 8 }]) {
+  for (const point of [
+    { x: 8, y: 8 },
+    { x: width - 8, y: 8 },
+    { x: 8, y: height - 8 },
+    { x: width - 8, y: height - 8 },
+  ]) {
     const safe = await targetPage.evaluate(({ x, y }) => {
       const target = document.elementFromPoint(x, y);
-      return Boolean(target && !target.closest(
-        'a,button,input,select,textarea,iframe,[role="button"],[role="link"],[onclick],[tabindex],[contenteditable]',
-      ));
+      return Boolean(
+        target &&
+        !target.closest(
+          'a,button,input,select,textarea,iframe,[role="button"],[role="link"],[onclick],[tabindex],[contenteditable]',
+        ),
+      );
     }, point);
     if (!safe) continue;
     await targetPage.mouse.click(point.x, point.y);
@@ -113,7 +122,9 @@ async function activateNeutral(targetPage: Page): Promise<ActivationResult> {
     assert.equal(hasBeenActive, true, 'The browser did not record trusted user interaction');
     return { point, hasBeenActive };
   }
-  throw new Error('No neutral activation point is available without clicking an interactive control');
+  throw new Error(
+    'No neutral activation point is available without clicking an interactive control',
+  );
 }
 
 const browserOptions: PersistentContextOptions = {
@@ -127,7 +138,11 @@ const browserOptions: PersistentContextOptions = {
 try {
   await mkdir(evidencePath, { recursive: true });
   const requested = new URL(process.env.LIVE_MEET_URL ?? '');
-  assert.equal(requested.origin, 'https://meet.google.com', 'Only Google Meet HTTPS URLs are allowed');
+  assert.equal(
+    requested.origin,
+    'https://meet.google.com',
+    'Only Google Meet HTTPS URLs are allowed',
+  );
   assert.ok(requested.pathname.startsWith('/meet/'), 'The requested path must start with /meet/');
   assert.equal(requested.username + requested.password, '', 'URL credentials are not allowed');
   report.requestedUrl = urlWithoutQuery(requested.href);
@@ -136,7 +151,11 @@ try {
     version: string;
     content_scripts?: unknown[];
   };
-  report.extension = { name: manifest.name, version: manifest.version, contentScripts: manifest.content_scripts };
+  report.extension = {
+    name: manifest.name,
+    version: manifest.version,
+    contentScripts: manifest.content_scripts,
+  };
   profilePath = await mkdtemp(join(tmpdir(), 'mtg-harness-live-'));
   context = await chromium.launchPersistentContext(profilePath, {
     ...browserOptions,
@@ -157,13 +176,18 @@ try {
       report.urlTransitions.push(urlWithoutQuery(frame.url()));
     }
   });
-  const response = await livePage.goto(requested.href, { waitUntil: 'domcontentloaded', timeout: 30_000 });
+  const response = await livePage.goto(requested.href, {
+    waitUntil: 'domcontentloaded',
+    timeout: 30_000,
+  });
   report.httpStatus = response?.status();
   await livePage.waitForTimeout(5_000);
   report.finalUrl = urlWithoutQuery(livePage.url());
   report.finalPath = new URL(livePage.url()).pathname;
   report.title = (await livePage.title()).slice(0, 300);
-  report.pageTextExcerpt = (await livePage.locator('body').innerText()).replace(/\s+/g, ' ').slice(0, 500);
+  report.pageTextExcerpt = (await livePage.locator('body').innerText())
+    .replace(/\s+/g, ' ')
+    .slice(0, 500);
   await livePage.screenshot({ path: join(evidencePath, 'live-meet.png') });
 
   const current = new URL(livePage.url());
@@ -175,11 +199,16 @@ try {
   report.userActivation = await activateNeutral(livePage);
   const loadedUrl = livePage.url();
   const marker = randomUUID();
-  await livePage.evaluate((value) => { (window as SmokeWindow).__mtgHarnessSmokeMarker = value; }, marker);
+  await livePage.evaluate((value) => {
+    (window as SmokeWindow).__mtgHarnessSmokeMarker = value;
+  }, marker);
   await closeWithDialog(livePage, 'dismiss');
   assert.equal(livePage.isClosed(), false);
   assert.equal(livePage.url(), loadedUrl);
-  assert.equal(await livePage.evaluate(() => (window as SmokeWindow).__mtgHarnessSmokeMarker), marker);
+  assert.equal(
+    await livePage.evaluate(() => (window as SmokeWindow).__mtgHarnessSmokeMarker),
+    marker,
+  );
   report.checks.cancelKeepsTabAndDocument = true;
   await livePage.screenshot({ path: join(evidencePath, 'live-meet.png') });
   await closeWithDialog(livePage, 'accept');
@@ -201,7 +230,11 @@ try {
   control.finalUrl = urlWithoutQuery(controlPage.url());
   control.title = (await controlPage.title()).slice(0, 300);
   await controlPage.screenshot({ path: join(evidencePath, 'live-meet-control.png') });
-  assert.equal(control.finalUrl, report.finalUrl, 'Control and extension browsers reached different final URLs');
+  assert.equal(
+    control.finalUrl,
+    report.finalUrl,
+    'Control and extension browsers reached different final URLs',
+  );
   control.userActivation = await activateNeutral(controlPage);
   const controlDialogTasks: Promise<void>[] = [];
   controlPage.on('dialog', (dialog) => {
@@ -224,11 +257,19 @@ try {
   // Keep only our error message, not Playwright call logs with possible auth URLs.
   const message = error instanceof Error ? error.message : String(error);
   report.error = (message.split('\n')[0] ?? '').replace(/https?:\/\/[^\s"')]+/g, (url) => {
-    try { return urlWithoutQuery(url); } catch { return '[URL]'; }
+    try {
+      return urlWithoutQuery(url);
+    } catch {
+      return '[URL]';
+    }
   });
   process.exitCode = 1;
   if (page && !page.isClosed()) {
-    await bounded(page.screenshot({ path: join(evidencePath, 'live-meet.png') }), 5_000, 'Failure screenshot').catch(() => {});
+    await bounded(
+      page.screenshot({ path: join(evidencePath, 'live-meet.png') }),
+      5_000,
+      'Failure screenshot',
+    ).catch(() => {});
   }
 } finally {
   for (const browserContext of [context, controlContext]) {

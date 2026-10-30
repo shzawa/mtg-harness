@@ -1,0 +1,7 @@
+packages:
+  - .
+
+saveExact: true
+
+allowBuilds:
+  fsevents: false

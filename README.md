@@ -15,13 +15,14 @@ Google Meet の対象ページを誤って閉じてしまい、会議から離�
 
 ## セットアップとビルド
 
-Node.js 24 以上と npm が必要です。CI 用スクリプトは Node.js 標準の TypeScript 実行機能で、テストは Vitest で実行します。
+Node.js 24 以上と pnpm が必要です。pnpm のバージョンは `packageManager` で固定しています。CI 用スクリプトは Node.js 標準の TypeScript 実行機能で、テストは Vitest で実行します。
 
 ```sh
 gh repo clone shzawa/mtg-harness
 cd mtg-harness
-npm ci
-npm run build
+npm install --global pnpm@12.16.1
+pnpm install --frozen-lockfile
+pnpm build
 ```
 
 Chrome で `chrome://extensions`（Edge は `edge://extensions`）を開き、「デベロッパー モード」をオンにします。「パッケージ化されていない拡張機能を読み込む」から `.output/chrome-mv3` フォルダを選択してください。リポジトリ直下ではなく、ビルド済みのフォルダを選びます。このフォルダはインストール後も保管してください。
@@ -36,15 +37,15 @@ Chrome で `chrome://extensions`（Edge は `edge://extensions`）を開き、�
 
 **`https://meet.google.com/meet/` で始まる URL だけ**が対象です。参加状態は判定せず、この URL にいる間に確認します。
 
-| URL の例 | この拡張の確認 |
-| --- | --- |
-| `https://meet.google.com/meet/` | あり |
-| `https://meet.google.com/meet/example` | あり |
-| `https://meet.google.com/meet/example?authuser=1#section` | あり |
-| `https://meet.google.com/` | なし |
-| `https://meet.google.com/abc-defg-hij` | なし |
-| `https://meet.google.com/meet`（末尾の `/` なし） | なし |
-| Google Meet 以外のサイト | なし |
+| URL の例                                                  | この拡張の確認 |
+| --------------------------------------------------------- | -------------- |
+| `https://meet.google.com/meet/`                           | あり           |
+| `https://meet.google.com/meet/example`                    | あり           |
+| `https://meet.google.com/meet/example?authuser=1#section` | あり           |
+| `https://meet.google.com/`                                | なし           |
+| `https://meet.google.com/abc-defg-hij`                    | なし           |
+| `https://meet.google.com/meet`（末尾の `/` なし）         | なし           |
+| Google Meet 以外のサイト                                  | なし           |
 
 リダイレクト後や、ページの再読み込みなしで URL が変わった場合は、その時点の URL で判定します。
 
@@ -60,30 +61,36 @@ Chrome で `chrome://extensions`（Edge は `edge://extensions`）を開き、�
 ## 開発
 
 ```sh
-npm run dev        # 開発ビルドとブラウザ起動
-npm run typecheck  # 拡張・スクリプト・テストの型検査
-npm run build      # Chrome/Edge 向け Manifest V3 ビルド
-npm run zip        # 配布用 ZIP を .output/ に作成
-npm run test:release # Release 処理のテスト
+pnpm dev          # 開発ビルドとブラウザ起動
+pnpm lint         # Oxlint のチェック
+pnpm lint:fix     # Oxlint の自動修正
+pnpm format       # Oxfmt で整形
+pnpm format:check # 整形状態のチェック
+pnpm typecheck  # 拡張・スクリプト・テストの型検査
+pnpm build      # Chrome/Edge 向け Manifest V3 ビルド
+pnpm zip        # 配布用 ZIP を .output/ に作成
+pnpm test:release # Release 処理のテスト
 ```
+
+lint は [Oxlint](https://oxc.rs/docs/guide/usage/linter.html)、format は [Oxfmt](https://oxc.rs/docs/guide/usage/formatter.html) を使用します。型検査は WXT 用と Node.js 用の TypeScript 設定で行います。
 
 開発用フォルダは `.output/chrome-mv3-dev` です。拡張の動作確認には、本番ビルドの `.output/chrome-mv3` を使ってください。
 
 ## テスト
 
 ```sh
-npx playwright install chromium
-npm run typecheck
-npm test
+pnpm exec playwright install chromium
+pnpm typecheck
+pnpm test
 ```
 
 テストランナーは Vitest です。`release` プロジェクトで Release 処理を、`e2e` プロジェクトで Playwright を使ったブラウザ動作を検証します。
 
 ブラウザテストは、ビルド済み拡張を Chromium に読み込み、閉じる前の確認、キャンセル後の再確認、更新・遷移、対象 URL の境界、再読み込みなしの URL 変更を検証します。テスト用ページは通信を差し替えて配信するため、Google アカウントや実際の会議は不要です。実際の Google Meet 会議での確認は別途行ってください。
 
-`npm run test:release` で Release テストだけを、ビルド後の `npm run test:e2e` でブラウザテストだけを実行できます。
+`pnpm test:release` で Release テストだけを、ビルド後の `pnpm test:e2e` でブラウザテストだけを実行できます。
 
-GitHub Actions でも型検査・ビルド・ブラウザテスト・ZIP 作成を実行します。成功した実行の `chrome-extension` アーティファクトから、ビルド済み拡張をダウンロードできます。
+GitHub Actions でも format・lint・型検査・ビルド・ブラウザテスト・ZIP 作成を実行します。成功した実行の `chrome-extension` アーティファクトから、ビルド済み拡張をダウンロードできます。
 
 実際の URL で参加前のページを確認する場合は、CI を手動実行して `live_url` を指定します。これは通信を差し替えずにページを開き、URL、操作後の確認、キャンセル後のタブ維持を検証します。会議への参加や、マイク・カメラへのアクセス許可は行いません。会議参加中の接続維持は別途確認が必要です。
 
@@ -95,13 +102,13 @@ gh workflow run ci.yml -f live_url='https://meet.google.com/meet/your-meeting-co
 
 ## バージョン更新と自動 Release
 
-`package.json` のバージョンを増やして `main` に push すると、型検査・Release 処理のテスト・Chromium のブラウザテストを通過した後に、`v<version>` タグと GitHub Release を自動作成します。Release には、その CI でテストしたビルドの ZIP が添付されます。
+`package.json` のバージョンを増やして `main` に push すると、format・lint・型検査・Release 処理のテスト・Chromium のブラウザテストを通過した後に、`v<version>` タグと GitHub Release を自動作成します。Release には、その CI でテストしたビルドの ZIP が添付されます。
 
-バージョンとロックファイルを同時に更新するには、次のコマンドを使います。
+バージョンの更新には、次のコマンドを使います。
 
 ```sh
-npm version patch --no-git-tag-version
-git add package.json package-lock.json
+pnpm version patch --no-git-tag-version
+git add package.json pnpm-lock.yaml
 git commit -m "chore: bump extension version"
 git push origin main
 ```

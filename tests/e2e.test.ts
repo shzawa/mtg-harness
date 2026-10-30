@@ -18,7 +18,10 @@ let context: BrowserContext | undefined;
 let profilePath: string | undefined;
 let keeperPage: Page | undefined;
 
-async function openPage(url: string, { interact = true }: { interact?: boolean } = {}): Promise<Page> {
+async function openPage(
+  url: string,
+  { interact = true }: { interact?: boolean } = {},
+): Promise<Page> {
   if (!context) throw new Error('The test browser context has not been initialized');
   const page = await context.newPage();
   await page.goto(url);
@@ -29,21 +32,19 @@ async function openPage(url: string, { interact = true }: { interact?: boolean }
 async function closeWithConfirmation(page: Page, decision: DialogDecision): Promise<void> {
   // runBeforeUnload returns before the tab closes, and cancellation keeps it open.
   // Register both events before asking the browser to close the tab.
-  const closed = decision === 'accept'
-    ? page.waitForEvent('close', { timeout: eventTimeout })
-    : Promise.resolve();
-  const handledDialog = page.waitForEvent('dialog', { timeout: eventTimeout })
+  const closed =
+    decision === 'accept'
+      ? page.waitForEvent('close', { timeout: eventTimeout })
+      : Promise.resolve();
+  const handledDialog = page
+    .waitForEvent('dialog', { timeout: eventTimeout })
     .then(async (dialog) => {
       const type = dialog.type();
       await dialog[decision]();
       expect(type).toBe('beforeunload');
     });
 
-  await Promise.all([
-    closed,
-    handledDialog,
-    page.close({ runBeforeUnload: true }),
-  ]);
+  await Promise.all([closed, handledDialog, page.close({ runBeforeUnload: true })]);
 
   expect(page.isClosed()).toBe(decision === 'accept');
   if (decision === 'dismiss') {
@@ -63,8 +64,12 @@ async function closeWithoutConfirmation(page: Page): Promise<void> {
   expect(dialogs, 'The extension must not request confirmation here').toEqual([]);
 }
 
-async function cancelNavigation(page: Page, triggerNavigation: () => Promise<unknown>): Promise<void> {
-  const handledDialog = page.waitForEvent('dialog', { timeout: eventTimeout })
+async function cancelNavigation(
+  page: Page,
+  triggerNavigation: () => Promise<unknown>,
+): Promise<void> {
+  const handledDialog = page
+    .waitForEvent('dialog', { timeout: eventTimeout })
     .then(async (dialog) => {
       const type = dialog.type();
       await dialog.dismiss();
@@ -83,24 +88,28 @@ describe('MTG Harness built Chrome extension', { concurrent: false }, () => {
       channel: 'chromium',
       headless: true,
       ignoreDefaultArgs: ['--disable-extensions'],
-      args: [
-        `--disable-extensions-except=${extensionPath}`,
-        `--load-extension=${extensionPath}`,
-      ],
+      args: [`--disable-extensions-except=${extensionPath}`, `--load-extension=${extensionPath}`],
     });
     // Keep one blank tab open while tests exercise closing their own tabs.
-    keeperPage = context.pages()[0] ?? await context.newPage();
+    keeperPage = context.pages()[0] ?? (await context.newPage());
     context.setDefaultTimeout(eventTimeout);
     // Serve controlled documents at realistic URLs; never contact Google Meet.
-    await context.route('https://**/*', (route) => route.fulfill({
-      contentType: 'text/html',
-      body: fixture,
-    }));
+    await context.route('https://**/*', (route) =>
+      route.fulfill({
+        contentType: 'text/html',
+        body: fixture,
+      }),
+    );
   }, 30_000);
 
   afterEach(async () => {
     if (context) {
-      await Promise.all(context.pages().filter((page) => page !== keeperPage).map((page) => page.close()));
+      await Promise.all(
+        context
+          .pages()
+          .filter((page) => page !== keeperPage)
+          .map((page) => page.close()),
+      );
     }
   });
 
@@ -121,15 +130,23 @@ describe('MTG Harness built Chrome extension', { concurrent: false }, () => {
   it('also allows canceling reload and cross-document navigation', async () => {
     const url = 'https://meet.google.com/meet/';
     const page = await openPage(url);
-    await page.evaluate(() => { (window as FixtureWindow).fixtureMarker = 'original document'; });
+    await page.evaluate(() => {
+      (window as FixtureWindow).fixtureMarker = 'original document';
+    });
 
     await cancelNavigation(page, () => page.evaluate(() => window.location.reload()));
     expect(page.url()).toBe(url);
-    expect(await page.evaluate(() => (window as FixtureWindow).fixtureMarker)).toBe('original document');
+    expect(await page.evaluate(() => (window as FixtureWindow).fixtureMarker)).toBe(
+      'original document',
+    );
 
-    await cancelNavigation(page, () => page.evaluate(() => window.location.assign('https://example.com/away')));
+    await cancelNavigation(page, () =>
+      page.evaluate(() => window.location.assign('https://example.com/away')),
+    );
     expect(page.url()).toBe(url);
-    expect(await page.evaluate(() => (window as FixtureWindow).fixtureMarker)).toBe('original document');
+    expect(await page.evaluate(() => (window as FixtureWindow).fixtureMarker)).toBe(
+      'original document',
+    );
   }, 15_000);
 
   it('does not protect the home page, ordinary meetings, /meet, or another origin', async () => {

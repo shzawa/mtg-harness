@@ -75,14 +75,26 @@ export function parseVersion(version: unknown): VersionParts {
 }
 
 export function metadata(cwd = process.cwd()): { version: string; tag: string; asset: string } {
-  const { name, version } = parseJsonObject<{ name: string; version: string }>(readFileSync(join(cwd, 'package.json'), 'utf8'), 'package.json');
+  const { name, version } = parseJsonObject<{ name: string; version: string }>(
+    readFileSync(join(cwd, 'package.json'), 'utf8'),
+    'package.json',
+  );
   parseVersion(version);
   return { version, tag: `v${version}`, asset: `${name}-${version}-chrome.zip` };
 }
 
 const defaultRunner: ProcessRunner = (command, args) => {
-  const result = spawnSync(command, args, { encoding: 'utf8', maxBuffer: 8 * 1024 * 1024, timeout: 120_000 });
-  return { status: result.status, stdout: result.stdout ?? '', stderr: result.stderr ?? '', error: result.error };
+  const result = spawnSync(command, args, {
+    encoding: 'utf8',
+    maxBuffer: 8 * 1024 * 1024,
+    timeout: 120_000,
+  });
+  return {
+    status: result.status,
+    stdout: result.stdout ?? '',
+    stderr: result.stderr ?? '',
+    error: result.error,
+  };
 };
 
 function notes(version: string, asset: string): string {
@@ -104,53 +116,90 @@ Google Meet の /meet/ で始まるページを閉じる前に、ブラウザ標
 `;
 }
 
-export function release({ cwd = process.cwd(), env = process.env, run = defaultRunner, log = console.log }: ReleaseOptions = {}): { status: 'skipped' | 'published'; tag: string } {
+export function release({
+  cwd = process.cwd(),
+  env = process.env,
+  run = defaultRunner,
+  log = console.log,
+}: ReleaseOptions = {}): { status: 'skipped' | 'published'; tag: string } {
   const { version, tag, asset } = metadata(cwd);
   const repo = env.GITHUB_REPOSITORY ?? '';
   const sha = env.GITHUB_SHA?.toLowerCase() ?? '';
-  if (!/^[a-z\d][a-z\d-]*\/[a-z\d][a-z\d_.-]*$/i.test(repo ?? '') || !/^[a-f\d]{40}$/.test(sha ?? '')) {
+  if (
+    !/^[a-z\d][a-z\d-]*\/[a-z\d][a-z\d_.-]*$/i.test(repo ?? '') ||
+    !/^[a-f\d]{40}$/.test(sha ?? '')
+  ) {
     throw new Error('GITHUB_REPOSITORY and a full 40-character GITHUB_SHA are required');
   }
   const base = `repos/${repo}`;
   const command = (program: string, args: readonly string[]): string => {
     const result = run(program, args);
     if (result.error) throw result.error;
-    if (result.status !== 0) throw new Error(`${program} failed: ${result.stderr || result.stdout || result.status}`);
+    if (result.status !== 0)
+      throw new Error(`${program} failed: ${result.stderr || result.stdout || result.status}`);
     return result.stdout;
   };
   function api<T extends object>(path: string, options: ApiOptions & { missing: true }): T | null;
   function api<T extends object>(path: string, options?: ApiOptions & { missing?: false }): T;
-  function api<T extends object>(path: string, { missing = false, method = 'GET', fields = [] }: ApiOptions = {}): T | null {
+  function api<T extends object>(
+    path: string,
+    { missing = false, method = 'GET', fields = [] }: ApiOptions = {},
+  ): T | null {
     const result = run('gh', ['api', '--include', '--method', method, path, ...fields]);
     if (result.error) throw result.error;
     const status = Number(result.stdout?.match(/^HTTP\/[\d.]+\s+(\d{3})\b/)?.[1]);
     if (status === 404 && missing) return null;
     if (result.status !== 0 || status < 200 || status >= 300 || !status) {
-      throw new Error(`GitHub API ${method} ${path} failed (HTTP ${status || 'unknown'}): ${result.stderr || ''}`);
+      throw new Error(
+        `GitHub API ${method} ${path} failed (HTTP ${status || 'unknown'}): ${result.stderr || ''}`,
+      );
     }
-    return parseJsonObject<T>(result.stdout.split(/\r?\n\r?\n/).slice(1).join('\n\n'), 'GitHub API response');
+    return parseJsonObject<T>(
+      result.stdout
+        .split(/\r?\n\r?\n/)
+        .slice(1)
+        .join('\n\n'),
+      'GitHub API response',
+    );
   }
   const findRelease = (): GitHubRelease | null => {
     const published = api<GitHubRelease>(`${base}/releases/tags/${tag}`, { missing: true });
     if (published) return published;
     // Match gh's pending-draft lookup: REST tag/list results may omit drafts.
     const [owner, name] = repo.split('/');
-    const result = api<GraphQLReleaseLookup>('graphql', { method: 'POST', fields: [
-      '-f', 'query=query($owner:String!,$name:String!,$tag:String!){repository(owner:$owner,name:$name){release(tagName:$tag){databaseId isDraft}}}',
-      '-f', `owner=${owner}`, '-f', `name=${name}`, '-f', `tag=${tag}`,
-    ] });
-    if (result.errors?.length) throw new Error(`GraphQL Release lookup failed: ${result.errors.map((error) => error.message).join('; ')}`);
-    if (!result.data?.repository) throw new Error('GraphQL Release lookup did not return the repository');
+    const result = api<GraphQLReleaseLookup>('graphql', {
+      method: 'POST',
+      fields: [
+        '-f',
+        'query=query($owner:String!,$name:String!,$tag:String!){repository(owner:$owner,name:$name){release(tagName:$tag){databaseId isDraft}}}',
+        '-f',
+        `owner=${owner}`,
+        '-f',
+        `name=${name}`,
+        '-f',
+        `tag=${tag}`,
+      ],
+    });
+    if (result.errors?.length)
+      throw new Error(
+        `GraphQL Release lookup failed: ${result.errors.map((error) => error.message).join('; ')}`,
+      );
+    if (!result.data?.repository)
+      throw new Error('GraphQL Release lookup did not return the repository');
     const found = result.data.repository.release;
     if (!found) return null;
-    if (!Number.isSafeInteger(found.databaseId) || found.databaseId <= 0) throw new Error('GraphQL Release lookup returned an invalid ID');
+    if (!Number.isSafeInteger(found.databaseId) || found.databaseId <= 0)
+      throw new Error('GraphQL Release lookup returned an invalid ID');
     return api<GitHubRelease>(`${base}/releases/${found.databaseId}`);
   };
-  const hasAsset = (item: GitHubRelease): boolean => item.assets?.some((file) => file.name === asset && file.state === 'uploaded' && file.size > 0);
+  const hasAsset = (item: GitHubRelease): boolean =>
+    item.assets?.some((file) => file.name === asset && file.state === 'uploaded' && file.size > 0);
   let existing = findRelease();
-  if (existing?.prerelease) throw new Error(`${tag} is marked as a prerelease; only stable Releases are supported`);
+  if (existing?.prerelease)
+    throw new Error(`${tag} is marked as a prerelease; only stable Releases are supported`);
   if (existing && !existing.draft) {
-    if (!hasAsset(existing)) throw new Error(`Published ${tag} is missing its completed ZIP asset; refusing to change it`);
+    if (!hasAsset(existing))
+      throw new Error(`Published ${tag} is missing its completed ZIP asset; refusing to change it`);
     log(`${tag} is already published with ${asset}; no changes made`);
     return { status: 'skipped', tag };
   }
@@ -160,17 +209,27 @@ export function release({ cwd = process.cwd(), env = process.env, run = defaultR
 
   const zip = join(cwd, 'release-assets', asset);
   if (statSync(zip).size === 0) throw new Error('The tested ZIP is empty');
-  const manifest = parseJsonObject<ZipManifest>(command('unzip', ['-p', zip, 'manifest.json']), 'ZIP manifest');
-  if (manifest.manifest_version !== 3 || manifest.version !== version ||
-      (manifest.version_name !== undefined && manifest.version_name !== version)) {
-    throw new Error('The tested ZIP manifest does not match the stable package version and Manifest V3');
+  const manifest = parseJsonObject<ZipManifest>(
+    command('unzip', ['-p', zip, 'manifest.json']),
+    'ZIP manifest',
+  );
+  if (
+    manifest.manifest_version !== 3 ||
+    manifest.version !== version ||
+    (manifest.version_name !== undefined && manifest.version_name !== version)
+  ) {
+    throw new Error(
+      'The tested ZIP manifest does not match the stable package version and Manifest V3',
+    );
   }
   const latest = api<GitHubRelease>(`${base}/releases/latest`, { missing: true });
   if (latest) {
     const previous = parseVersion(latest.tag_name.replace(/^v/, ''));
     const current = parseVersion(version);
-    const difference = current[0] - previous[0] || current[1] - previous[1] || current[2] - previous[2];
-    if (difference <= 0) throw new Error(`${tag} must be newer than latest Release ${latest.tag_name}`);
+    const difference =
+      current[0] - previous[0] || current[1] - previous[1] || current[2] - previous[2];
+    if (difference <= 0)
+      throw new Error(`${tag} must be newer than latest Release ${latest.tag_name}`);
   }
   let ref = api<GitReference>(`${base}/git/ref/tags/${tag}`, { missing: true });
   if (ref) {
@@ -184,7 +243,10 @@ export function release({ cwd = process.cwd(), env = process.env, run = defaultR
       throw new Error(`Tag ${tag} does not point to tested commit ${sha}`);
     }
   } else {
-    api<GitReference>(`${base}/git/refs`, { method: 'POST', fields: ['-f', `ref=refs/tags/${tag}`, '-f', `sha=${sha}`] });
+    api<GitReference>(`${base}/git/refs`, {
+      method: 'POST',
+      fields: ['-f', `ref=refs/tags/${tag}`, '-f', `sha=${sha}`],
+    });
   }
   const temp = mkdtempSync(join(tmpdir(), 'mtg-harness-release-'));
   try {
@@ -192,16 +254,38 @@ export function release({ cwd = process.cwd(), env = process.env, run = defaultR
       const notesFile = join(temp, 'release-notes.md');
       writeFileSync(notesFile, notes(version, asset));
       // Use the creation response instead of immediately rediscovering the draft.
-      existing = api<GitHubRelease>(`${base}/releases`, { method: 'POST', fields: [
-        '-f', `tag_name=${tag}`, '-f', `target_commitish=${sha}`, '-f', `name=${tag}`,
-        '-F', 'draft=true', '-F', 'prerelease=false', '-F', `body=@${notesFile}`,
-      ] });
-      if (!Number.isSafeInteger(existing?.id) || !existing.draft || existing.tag_name !== tag || existing.prerelease || existing.target_commitish?.toLowerCase() !== sha) {
-        throw new Error(`The created draft could not be verified (id=${existing?.id}, draft=${existing?.draft}, target=${existing?.target_commitish})`);
+      existing = api<GitHubRelease>(`${base}/releases`, {
+        method: 'POST',
+        fields: [
+          '-f',
+          `tag_name=${tag}`,
+          '-f',
+          `target_commitish=${sha}`,
+          '-f',
+          `name=${tag}`,
+          '-F',
+          'draft=true',
+          '-F',
+          'prerelease=false',
+          '-F',
+          `body=@${notesFile}`,
+        ],
+      });
+      if (
+        !Number.isSafeInteger(existing?.id) ||
+        !existing.draft ||
+        existing.tag_name !== tag ||
+        existing.prerelease ||
+        existing.target_commitish?.toLowerCase() !== sha
+      ) {
+        throw new Error(
+          `The created draft could not be verified (id=${existing?.id}, draft=${existing?.draft}, target=${existing?.target_commitish})`,
+        );
       }
     }
     if (!hasAsset(existing)) {
-      if (existing.assets?.some((file) => file.name === asset)) throw new Error(`Draft ${tag} has an incomplete ZIP asset; refusing to overwrite it`);
+      if (existing.assets?.some((file) => file.name === asset))
+        throw new Error(`Draft ${tag} has an incomplete ZIP asset; refusing to overwrite it`);
       command('gh', ['release', 'upload', tag, zip, '--repo', repo]);
     }
     const ready = api<GitHubRelease>(`${base}/releases/${existing.id}`);
