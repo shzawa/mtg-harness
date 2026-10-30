@@ -2,7 +2,7 @@
 
 Google Meet の対象ページを誤って閉じてしまい、会議から離脱することを防ぐ Chrome／Edge 向けブラウザ拡張です。ページ内を一度操作した後、タブを閉じる前にブラウザ標準の確認を表示します。キャンセルするとタブに残れます。
 
-[WXT](https://wxt.dev/) と TypeScript を使用しています。
+[WXT](https://wxt.dev/) を使い、拡張本体・CI 用スクリプト・テストを TypeScript で実装しています。
 
 ## インストール（ビルド不要）
 
@@ -15,7 +15,7 @@ Google Meet の対象ページを誤って閉じてしまい、会議から離�
 
 ## セットアップとビルド
 
-Node.js 22.12.0 以上（推奨: 24）と npm が必要です。
+Node.js 24 以上と npm が必要です。CI 用スクリプトとテストは、Node.js 標準の TypeScript 実行機能を使います。
 
 ```sh
 gh repo clone shzawa/mtg-harness
@@ -61,7 +61,7 @@ Chrome で `chrome://extensions`（Edge は `edge://extensions`）を開き、�
 
 ```sh
 npm run dev        # 開発ビルドとブラウザ起動
-npm run typecheck  # TypeScript の型検査
+npm run typecheck  # 拡張・スクリプト・テストの型検査
 npm run build      # Chrome/Edge 向け Manifest V3 ビルド
 npm run zip        # 配布用 ZIP を .output/ に作成
 npm run test:release # Release 処理のテスト

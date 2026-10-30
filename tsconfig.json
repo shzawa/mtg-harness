@@ -3,5 +3,6 @@
   "compilerOptions": {
     "strict": true,
     "noEmit": true
-  }
+  },
+  "include": ["entrypoints/**/*.ts", "wxt.config.ts", ".wxt/wxt.d.ts"]
 }

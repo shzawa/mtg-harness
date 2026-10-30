@@ -3,29 +3,43 @@ import { spawnSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { test } from 'node:test';
+import { test, type TestContext } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { metadata, parseVersion, release } from '../scripts/release.mjs';
+import { metadata, parseVersion, release, type GitHubRelease, type GitReference, type ProcessResult, type ProcessRunner, type ReleaseEnvironment, type ZipManifest } from '../scripts/release.ts';
+
+interface FixtureState {
+  release: Partial<GitHubRelease> | null;
+  latest: Partial<GitHubRelease> | null;
+  ref: GitReference | null;
+  tagObjects: Record<string, GitReference>;
+  manifest: ZipManifest;
+  apiErrors: Record<string, ProcessResult>;
+  calls: string[][];
+  mutations: string[];
+  hideDraftFromGraphql?: boolean;
+  uploadFails?: boolean;
+  createdResponse?: Partial<GitHubRelease>;
+}
 
 const sha = 'a'.repeat(40);
 const otherSha = 'b'.repeat(40);
 const tag = 'v1.0.0';
 const assetName = 'mtg-harness-1.0.0-chrome.zip';
 const uploadedAsset = { name: assetName, state: 'uploaded', size: 42 };
-const http = (body, status = 200) => ({
+const http = (body: unknown, status = 200): ProcessResult => ({
   status: status < 400 ? 0 : 1,
   stdout: `HTTP/2.0 ${status} Response\r\nContent-Type: application/json\r\n\r\n${JSON.stringify(body)}`,
   stderr: status < 400 ? '' : `gh: request failed (HTTP ${status})`,
 });
 
-function fixture(t, options = {}) {
+function fixture(t: TestContext, options: Partial<FixtureState> = {}) {
   const cwd = mkdtempSync(join(tmpdir(), 'mtg-harness-release-test-'));
   t.after(() => rmSync(cwd, { recursive: true, force: true }));
   writeFileSync(join(cwd, 'package.json'), JSON.stringify({ name: 'mtg-harness', version: '1.0.0' }));
   mkdirSync(join(cwd, 'release-assets'));
   const zip = join(cwd, 'release-assets', assetName);
   writeFileSync(zip, 'fake ZIP; unzip output is supplied by the process runner');
-  const state = {
+  const state: FixtureState = {
     release: null,
     latest: null,
     ref: null,
@@ -36,7 +50,7 @@ function fixture(t, options = {}) {
     mutations: [],
     ...options,
   };
-  const run = (command, args) => {
+  const run: ProcessRunner = (command, args) => {
     state.calls.push([command, ...args]);
     if (command === 'unzip') {
       assert.deepEqual(args, ['-p', zip, 'manifest.json']);
@@ -46,6 +60,7 @@ function fixture(t, options = {}) {
     if (args[0] === 'api') {
       const path = args[args.indexOf('--method') + 2];
       const method = args[args.indexOf('--method') + 1];
+      assert.ok(path && method);
       if (state.apiErrors[path]) return state.apiErrors[path];
       if (path.endsWith('/releases/tags/v1.0.0')) return state.release && !state.release.draft ? http(state.release) : http({}, 404);
       if (path === 'graphql') {
@@ -55,7 +70,11 @@ function fixture(t, options = {}) {
       }
       if (path.endsWith('/releases/latest')) return state.latest ? http(state.latest) : http({}, 404);
       if (path.endsWith('/git/ref/tags/v1.0.0')) return state.ref ? http(state.ref) : http({}, 404);
-      if (path.includes('/git/tags/')) return http(state.tagObjects[path.split('/').at(-1)]);
+      if (path.includes('/git/tags/')) {
+        const tagObjectSha = path.split('/').at(-1);
+        assert.ok(tagObjectSha);
+        return http(state.tagObjects[tagObjectSha]);
+      }
       if (path.endsWith('/git/refs') && method === 'POST') {
         assert.ok(args.includes('ref=refs/tags/v1.0.0'));
         assert.ok(args.includes(`sha=${sha}`));
@@ -66,7 +85,9 @@ function fixture(t, options = {}) {
       if (path.endsWith('/releases/1')) return http(state.release);
       if (path.endsWith('/releases') && method === 'POST') {
         for (const field of ['tag_name=v1.0.0', `target_commitish=${sha}`, 'name=v1.0.0', 'draft=true', 'prerelease=false']) assert.ok(args.includes(field));
-        const notesFile = args.find((arg) => arg.startsWith('body=@')).slice('body=@'.length);
+        const notesField = args.find((arg) => arg.startsWith('body=@'));
+        assert.ok(notesField);
+        const notesFile = notesField.slice('body=@'.length);
         const notes = readFileSync(notesFile, 'utf8');
         assert.ok(notes.includes(assetName) && notes.includes('自動更新には対応しません'));
         state.release = { id: 1, tag_name: tag, draft: true, prerelease: false, target_commitish: sha, assets: [] };
@@ -84,9 +105,11 @@ function fixture(t, options = {}) {
       assert.equal(args[3], zip);
       assert.ok(!args.includes('--clobber'));
       if (state.uploadFails) return { status: 1, stdout: '', stderr: 'upload network failure' };
+      assert.ok(state.release?.assets);
       state.release.assets.push({ ...uploadedAsset });
     } else if (action === 'edit') {
       assert.ok(args.includes('--draft=false') && args.includes('--latest'));
+      assert.ok(state.release);
       state.release.draft = false;
     } else {
       assert.fail(`Unexpected release action ${action}`);
@@ -96,7 +119,7 @@ function fixture(t, options = {}) {
   };
   return {
     cwd, zip, state,
-    publish: (env = {}) => release({ cwd, env: { GITHUB_REPOSITORY: 'owner/repo', GITHUB_SHA: sha, ...env }, run, log() {} }),
+    publish: (env: ReleaseEnvironment = {}) => release({ cwd, env: { GITHUB_REPOSITORY: 'owner/repo', GITHUB_SHA: sha, ...env }, run, log() {} }),
   };
 }
 
@@ -107,7 +130,7 @@ test('metadata accepts stable Chrome versions and rejects ambiguous or unsupport
   }
   const f = fixture(t);
   assert.deepEqual(metadata(f.cwd), { version: '1.0.0', tag, asset: assetName });
-  const script = fileURLToPath(new URL('../scripts/release.mjs', import.meta.url));
+  const script = fileURLToPath(new URL('../scripts/release.ts', import.meta.url));
   const result = spawnSync(process.execPath, [script, '--metadata'], { cwd: f.cwd, encoding: 'utf8' });
   assert.equal(result.status, 0);
   assert.equal(result.stdout, 'version=1.0.0\ntag=v1.0.0\n');
@@ -168,6 +191,7 @@ test('a first release creates the tested tag, draft, ZIP upload, then publishes'
   const f = fixture(t, { hideDraftFromGraphql: true });
   assert.deepEqual(f.publish(), { status: 'published', tag });
   assert.deepEqual(f.state.mutations, ['create-tag', 'create', 'upload', 'edit']);
+  assert.ok(f.state.release && f.state.ref?.object);
   assert.equal(f.state.release.draft, false);
   assert.equal(f.state.ref.object.sha, sha);
   assert.equal(f.state.calls.filter((call) => call[0] === 'gh' && call.includes('graphql')).length, 1, 'The created draft is verified from its API response instead of rediscovered');
@@ -208,7 +232,7 @@ test('same-commit draft recovery uploads only a missing asset, never clobbering 
       release: { id: 1, tag_name: tag, draft: true, target_commitish: sha, assets },
     });
     f.publish();
-    assert.deepEqual(f.state.mutations, assets.length === 1 && assets[0].size === 9999 ? ['edit'] : ['upload', 'edit']);
+    assert.deepEqual(f.state.mutations, assets.length === 1 && assets[0]?.size === 9999 ? ['edit'] : ['upload', 'edit']);
     assert.ok(f.state.calls.some((call) => call.includes('graphql')));
     assert.equal(f.state.calls.filter((call) => call.includes('repos/owner/repo/releases/1')).length, 2, 'GraphQL databaseId resolves the draft before its final publish check');
   }
@@ -217,6 +241,7 @@ test('same-commit draft recovery uploads only a missing asset, never clobbering 
 test('a failed upload leaves a recoverable draft, and retry completes it without recreating the tag', (t) => {
   const f = fixture(t, { uploadFails: true });
   assert.throws(() => f.publish(), /upload network failure/);
+  assert.ok(f.state.release);
   assert.equal(f.state.release.draft, true);
   assert.deepEqual(f.state.mutations, ['create-tag', 'create']);
   f.state.uploadFails = false;

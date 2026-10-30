@@ -5,24 +5,29 @@ import { join } from 'node:path';
 import { after, afterEach, before, describe, it } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
+import type { BrowserContext, Dialog, Page } from 'playwright';
+
+type DialogDecision = 'accept' | 'dismiss';
+type FixtureWindow = Window & { fixtureMarker?: string };
 
 const extensionPath = fileURLToPath(new URL('../.output/chrome-mv3/', import.meta.url));
 const fixture = `<!doctype html>
 <html lang="en"><head><title>Meet guard fixture</title></head>
 <body><button id="interact">Interact with this page</button></body></html>`;
 const eventTimeout = 5_000;
-let context;
-let profilePath;
-let keeperPage;
+let context: BrowserContext | undefined;
+let profilePath: string | undefined;
+let keeperPage: Page | undefined;
 
-async function openPage(url, { interact = true } = {}) {
+async function openPage(url: string, { interact = true }: { interact?: boolean } = {}): Promise<Page> {
+  assert.ok(context, 'The test browser context has not been initialized');
   const page = await context.newPage();
   await page.goto(url);
   if (interact) await page.locator('#interact').click();
   return page;
 }
 
-async function closeWithConfirmation(page, decision) {
+async function closeWithConfirmation(page: Page, decision: DialogDecision): Promise<void> {
   // runBeforeUnload returns before the tab closes, and cancellation keeps it open.
   // Register both events before asking the browser to close the tab.
   const closed = decision === 'accept'
@@ -47,8 +52,8 @@ async function closeWithConfirmation(page, decision) {
   }
 }
 
-async function closeWithoutConfirmation(page) {
-  const dialogs = [];
+async function closeWithoutConfirmation(page: Page): Promise<void> {
+  const dialogs: ReturnType<Dialog['type']>[] = [];
   // Resolve an unexpected dialog so a failing assertion cannot leave the tab stuck.
   page.on('dialog', async (dialog) => {
     dialogs.push(dialog.type());
@@ -59,7 +64,7 @@ async function closeWithoutConfirmation(page) {
   assert.deepEqual(dialogs, [], 'The extension must not request confirmation here');
 }
 
-async function cancelNavigation(page, triggerNavigation) {
+async function cancelNavigation(page: Page, triggerNavigation: () => Promise<unknown>): Promise<void> {
   const handledDialog = page.waitForEvent('dialog', { timeout: eventTimeout })
     .then(async (dialog) => {
       const type = dialog.type();
@@ -117,15 +122,15 @@ describe('MTG Harness built Chrome extension', { concurrency: false }, () => {
   it('also allows canceling reload and cross-document navigation', { timeout: 15_000 }, async () => {
     const url = 'https://meet.google.com/meet/';
     const page = await openPage(url);
-    await page.evaluate(() => { window.fixtureMarker = 'original document'; });
+    await page.evaluate(() => { (window as FixtureWindow).fixtureMarker = 'original document'; });
 
     await cancelNavigation(page, () => page.evaluate(() => window.location.reload()));
     assert.equal(page.url(), url);
-    assert.equal(await page.evaluate(() => window.fixtureMarker), 'original document');
+    assert.equal(await page.evaluate(() => (window as FixtureWindow).fixtureMarker), 'original document');
 
     await cancelNavigation(page, () => page.evaluate(() => window.location.assign('https://example.com/away')));
     assert.equal(page.url(), url);
-    assert.equal(await page.evaluate(() => window.fixtureMarker), 'original document');
+    assert.equal(await page.evaluate(() => (window as FixtureWindow).fixtureMarker), 'original document');
   });
 
   it('does not protect the home page, ordinary meetings, /meet, or another origin', { timeout: 20_000 }, async () => {
