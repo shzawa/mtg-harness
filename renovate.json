@@ -1,0 +1,47 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended", "helpers:pinGitHubActionDigestsToSemver"],
+  "enabledManagers": ["npm", "github-actions", "mise"],
+  "timezone": "Asia/Tokyo",
+  "schedule": ["* 3-8 * * 1"],
+  "minimumReleaseAge": "48 hours",
+  "minimumReleaseAgeBuffer": "30 minutes",
+  "minimumReleaseAgeBehaviour": "timestamp-required",
+  "internalChecksFilter": "strict",
+  "dependencyDashboard": true,
+  "automerge": false,
+  "ignoreScripts": true,
+  "prConcurrentLimit": 3,
+  "prHourlyLimit": 2,
+  "separateMajorMinor": true,
+  "lockFileMaintenance": {
+    "enabled": true,
+    "schedule": ["* 3-8 * * 1"]
+  },
+  "vulnerabilityAlerts": {
+    "enabled": true,
+    "automerge": false,
+    "minimumReleaseAge": "48 hours",
+    "prConcurrentLimit": 3
+  },
+  "packageRules": [
+    {
+      "matchManagers": ["npm"],
+      "matchDepTypes": [
+        "dependencies",
+        "devDependencies",
+        "optionalDependencies",
+        "packageManager"
+      ],
+      "rangeStrategy": "pin"
+    },
+    {
+      "matchPackageNames": ["pnpm", "pnpm/pnpm"],
+      "groupName": "pnpm toolchain"
+    },
+    {
+      "matchUpdateTypes": ["major"],
+      "dependencyDashboardApproval": true
+    }
+  ]
+}

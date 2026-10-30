@@ -1,6 +1,6 @@
 [tools]
 node = "24.22.1"
-pnpm = "{{ read_json(path=config_root ~ '/package.json')['packageManager'] | split(pat='@') | last }}"
+pnpm = "12.16.1"
 gh = "2.103.3"
 
 [tool_config]

@@ -28,7 +28,7 @@ pnpm install --frozen-lockfile
 pnpm build
 ```
 
-Node.js・GitHub CLI は `mise.toml` に固定し、pnpm は `package.json` の `packageManager` を mise から参照します。取得 URL とチェックサムは `mise.lock` に記録しています。ツール・キャッシュ・状態はプロジェクトの `.mise/` に保存します。以下のコマンドはリポジトリ直下で実行してください。
+Node.js・pnpm・GitHub CLI は `mise.toml` に固定し、pnpm は `package.json` の `packageManager` にも同じバージョンを指定します。取得 URL とチェックサムは `mise.lock` に記録しています。ツール・キャッシュ・状態はプロジェクトの `.mise/` に保存します。以下のコマンドはリポジトリ直下で実行してください。
 
 新しいターミナルを開いたら、リポジトリ直下で `eval "$(./bin/mise env -s zsh)"` を一度実行してください。Bash では `eval "$(./bin/mise env -s bash)"` を使います。同じセッションで `node`・`pnpm`・`gh` を直接使えるようになります。すでに mise をシェルに組み込んでいる場合は、このリポジトリの固定ツールが有効になっていれば env の実行は不要です。
 
@@ -96,7 +96,7 @@ lint は [Oxlint](https://oxc.rs/docs/guide/usage/linter.html)、format は [Oxf
 
 開発用フォルダは `.output/chrome-mv3-dev` です。拡張の動作確認には、本番ビルドの `.output/chrome-mv3` を使ってください。
 
-Node.js・GitHub CLI の更新は `mise.toml`、pnpm の更新は `package.json` の `packageManager` を変更し、次の順で反映・検証します。ツールのインストール後に env を再実行して、更新したツールをシェルへ反映してください。
+ツールの更新は `mise.toml`、pnpm の更新は併せて `package.json` の `packageManager` を変更し、次の順で反映・検証します。ツールのインストール後に env を再実行して、更新したツールをシェルへ反映してください。
 
 ```sh
 ./bin/mise lock
@@ -122,6 +122,19 @@ Bash／PowerShell ではセットアップ時と同じ env コマンドを使い
 CI は `pnpm audit --audit-level high` で High／Critical の既知の脆弱性が見つかると停止します。低い重大度も含めて確認するには `pnpm audit` を実行します。監査の通信エラーや修正版のない問題を一括で無視する設定は使っていません。
 
 2026-10-30 の監査では、開発依存の `deepmerge` に修正版未公開の Low が1件あります（[GHSA-gcqx-w48m-w2h4](https://github.com/advisories/GHSA-gcqx-w48m-w2h4)）。除外リストには登録していません。
+
+## リポジトリの保護と依存更新
+
+`main` への変更には PR と `check` の成功を必須とし、force push とブランチ削除を禁止しています。GitHub の secret scanning・push protection・Dependabot alerts も有効にしています。依存関係の登録状況に左右されず検知できるよう、毎日07:23（日本時間）に lockfile を `pnpm audit --audit-level high` で監査します。この監査ではアプリの依存パッケージをインストールしません。
+
+[Renovate GitHub App](https://github.com/apps/renovate) をこのリポジトリに接続すると、`renovate.json` の方針で更新 PR を作成します。
+
+- npm の直接依存・pnpm・mise のツール・GitHub Actions を対象とし、完全バージョンと Actions の SHA 固定を維持します。pnpm の2つの指定は同じ PR にまとめます。
+- 通常の更新と lockfile の保守は毎週月曜03:00〜09:00（日本時間）に行います。公開から48時間に加えて30分待ち、公開日時が分からない更新は保留します。
+- 通常の PR は同時3件・1時間に2件までです。メジャー更新は分離し、Dependency Dashboard で承認してから PR を作成します。自動マージは行いません。
+- 脆弱性の修正 PR は通常の曜日制限を受けませんが、48時間の待機と既存の pnpm ポリシーは維持します。Renovate にパッケージの install スクリプトや任意の更新スクリプトは実行させません。
+
+mise の lockfile 更新は safe mode に対応した実行環境が必要です。更新 PR で `mise.lock` の生成に失敗した場合は、上記の手順で再生成して同じ PR に追加し、CI の成功を確認してください。`bin/mise`・`bin/mise.cmd` は生成物のため、mise 本体の更新は上記の生成コマンドで行います。WXT やバンドル依存の更新では、ライセンスの承認情報も確認してください。
 
 ## テスト
 
@@ -162,20 +175,22 @@ gh workflow run ci.yml -f live_url='https://meet.google.com/meet/your-meeting-co
 
 ## バージョン更新と自動 Release
 
-`package.json` のバージョンを増やして `main` に push すると、依存パッケージの監査・format・lint・型検査・Release 処理のテスト・Chromium のブラウザテストを通過した後に、`v<version>` タグと GitHub Release を自動作成します。Release には、その CI でテストしたビルドの ZIP が添付されます。
+`package.json` のバージョンを増やす PR を `main` にマージすると、依存パッケージの監査・format・lint・型検査・Release 処理のテスト・Chromium のブラウザテストを通過した後に、`v<version>` タグと GitHub Release を自動作成します。Release には、その CI でテストしたビルドの ZIP が添付されます。
 
 バージョンの更新には、次のコマンドを使います。
 
 ```sh
+git switch -c chore/bump-extension-version
 pnpm version patch --no-git-tag-version
 git add package.json pnpm-lock.yaml
 git commit -m "chore: bump extension version"
-git push origin main
+git push --set-upstream origin HEAD
+gh pr create --base main
 ```
 
 マイナー更新は `patch` を `minor` に、メジャー更新は `major` に変更します。対応するバージョン形式は `1.0.0` のような3つの数値です。タグはテスト成功後に CI が作成するため、ローカルでタグを作る必要はありません。
 
-同じバージョンの公開済み Release は上書きしません。バージョンを変えない通常のコミットでは Release は増えず、バージョンを下げて未発行の Release を作る操作は失敗します。
+同じバージョンの公開済み Release は上書きしません。GitHub の immutable releases 設定も有効にしており、設定有効後に発行する Release は公開後のタグ・添付 ZIP の変更を防ぎます。バージョンを変えない通常のコミットでは Release は増えず、バージョンを下げて未発行の Release を作る操作は失敗します。
 
 公開が必要かどうかは読み取り権限のジョブで判定します。現在のバージョンが正常に公開済みなら、書き込み権限の Release ジョブは起動しません。新バージョンや下書きの公開時は、すべての検査を通過した後に従来のバージョン・タグ・ZIP の検証を実行します。
 

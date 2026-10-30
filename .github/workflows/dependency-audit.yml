@@ -1,0 +1,30 @@
+name: Dependency audit
+
+on:
+  schedule:
+    - cron: '23 22 * * *' # 07:23 Asia/Tokyo
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dependency-audit
+  cancel-in-progress: true
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - name: Install pinned toolchain
+        env:
+          MISE_GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          ./bin/mise install --locked
+          ./bin/mise env --paths >> "$GITHUB_PATH"
+      - name: Audit locked dependencies without installing packages
+        run: pnpm audit --audit-level high
