@@ -151,8 +151,9 @@ try {
   await controlPage.waitForTimeout(5_000);
   report.control.finalUrl = urlWithoutQuery(controlPage.url());
   report.control.title = (await controlPage.title()).slice(0, 300);
-  report.control.userActivation = await activateNeutral(controlPage);
   await controlPage.screenshot({ path: join(evidencePath, 'live-meet-control.png') });
+  assert.equal(report.control.finalUrl, report.finalUrl, 'Control and extension browsers reached different final URLs');
+  report.control.userActivation = await activateNeutral(controlPage);
   const controlDialogTasks = [];
   controlPage.on('dialog', (dialog) => {
     report.control.dialogTypes.push(dialog.type());
@@ -166,6 +167,9 @@ try {
   ]);
   await Promise.all(controlDialogTasks);
   report.control.sitePromptsWithoutExtension = report.control.dialogTypes.includes('beforeunload');
+  report.extensionAttribution = report.control.sitePromptsWithoutExtension
+    ? 'inconclusive-site-also-prompts'
+    : 'prompt-observed-only-with-extension';
   report.outcome = 'passed';
 } catch (error) {
   // Keep only our error message, not Playwright call logs with possible auth URLs.
@@ -180,6 +184,7 @@ try {
   for (const browserContext of [context, controlContext].filter(Boolean)) {
     await bounded(browserContext.close(), 10_000, 'Browser cleanup').catch((error) => {
       report.cleanupError = error.message;
+      if (report.outcome === 'passed') report.outcome = 'failed_cleanup';
       cleanupTimedOut = true;
       process.exitCode = 1;
     });
