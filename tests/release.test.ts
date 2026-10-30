@@ -156,18 +156,38 @@ function fixture(t: TestContext, options: Partial<FixtureState> = {}) {
     state.mutations.push(action);
     return { status: 0, stdout: '', stderr: '' };
   };
+  const invoke = (checkOnly: boolean, env: ReleaseEnvironment = {}) =>
+    release({
+      cwd,
+      env: { GITHUB_REPOSITORY: 'owner/repo', GITHUB_SHA: sha, ...env },
+      run,
+      log() {},
+      checkOnly,
+    });
   return {
     cwd,
     zip,
     state,
-    publish: (env: ReleaseEnvironment = {}) =>
-      release({
-        cwd,
-        env: { GITHUB_REPOSITORY: 'owner/repo', GITHUB_SHA: sha, ...env },
-        run,
-        log() {},
-      }),
+    publish: (env: ReleaseEnvironment = {}) => invoke(false, env),
+    check: (env: ReleaseEnvironment = {}) => invoke(true, env),
   };
+}
+
+function expectReadOnlyLookup(state: FixtureState): void {
+  expect(state.mutations).toEqual([]);
+  for (const call of state.calls) {
+    expect(call.slice(0, 3)).toEqual(['gh', 'api', '--include']);
+    const method = call[call.indexOf('--method') + 1];
+    const path = call[call.indexOf('--method') + 2];
+    if (path === 'graphql') {
+      expect(method).toBe('POST');
+      // GraphQL uses POST for reads too; the operation must remain a query.
+      expect(call.find((field) => field.startsWith('query='))).toMatch(/^query=query\(/);
+    } else {
+      expect(method).toBe('GET');
+      expect(path).toMatch(/^repos\/owner\/repo\/releases\/(tags\/v1\.0\.0|1)$/);
+    }
+  }
 }
 
 test('metadata accepts stable Chrome versions and rejects ambiguous or unsupported versions', (t) => {
@@ -234,6 +254,81 @@ test('published releases with the asset remain unchanged even when main has adva
   expect(f.publish({ GITHUB_SHA: otherSha })).toEqual({ status: 'skipped', tag });
   expect(f.state.calls).toHaveLength(1);
   expect(f.state.mutations).toEqual([]);
+});
+
+test('preflight skips a complete published release without reading the ZIP or changing it', (t) => {
+  const f = fixture(t, {
+    release: { draft: false, tag_name: tag, assets: [uploadedAsset], target_commitish: sha },
+  });
+  rmSync(f.zip);
+  expect(f.check({ GITHUB_SHA: otherSha })).toEqual({ status: 'skipped', tag });
+  expect(f.state.calls).toHaveLength(1);
+  expectReadOnlyLookup(f.state);
+});
+
+test('preflight reports missing or draft releases as pending using only release lookups', (t) => {
+  for (const pending of [
+    null,
+    { id: 1, tag_name: tag, draft: true, target_commitish: sha, assets: [] },
+    { id: 1, tag_name: tag, draft: true, target_commitish: otherSha, assets: [uploadedAsset] },
+  ]) {
+    const f = fixture(t, {
+      release: pending,
+      latest: { tag_name: 'v2.0.0' },
+      ref: { object: { type: 'commit', sha: otherSha } },
+    });
+    rmSync(f.zip);
+    expect(f.check()).toEqual({ status: 'needed', tag });
+    expect(f.state.calls).toHaveLength(pending === null ? 2 : 3);
+    expectReadOnlyLookup(f.state);
+  }
+});
+
+test('preflight still rejects prereleases and incomplete published assets', (t) => {
+  const prerelease = fixture(t, {
+    release: { draft: false, prerelease: true, tag_name: tag, assets: [uploadedAsset] },
+  });
+  expect(() => prerelease.check()).toThrow(/only stable Releases/);
+  expectReadOnlyLookup(prerelease.state);
+  const incomplete = fixture(t, {
+    release: { draft: false, tag_name: tag, assets: [{ ...uploadedAsset, state: 'starter' }] },
+  });
+  expect(() => incomplete.check()).toThrow(/Published.*missing/);
+  expectReadOnlyLookup(incomplete.state);
+});
+
+test('preflight cannot turn API errors into an unnecessary or skipped publication', (t) => {
+  for (const status of [401, 403, 429, 500]) {
+    const f = fixture(t, {
+      apiErrors: { 'repos/owner/repo/releases/tags/v1.0.0': http({}, status) },
+    });
+    expect(() => f.check()).toThrow(new RegExp(`HTTP ${status}`));
+    expectReadOnlyLookup(f.state);
+  }
+  for (const response of [
+    { status: 1, stdout: '', stderr: 'network timeout' },
+    http({ errors: [{ message: 'Resource not accessible' }], data: { repository: null } }),
+    http({ data: { repository: null } }),
+  ]) {
+    const f = fixture(t, { apiErrors: { graphql: response } });
+    expect(() => f.check()).toThrow(/HTTP unknown|GraphQL Release lookup/);
+    expectReadOnlyLookup(f.state);
+  }
+});
+
+test('preflight validates repository, commit, and package version before querying GitHub', (t) => {
+  for (const env of [{ GITHUB_REPOSITORY: '' }, { GITHUB_SHA: 'main' }]) {
+    const f = fixture(t);
+    expect(() => f.check(env)).toThrow(/GITHUB_REPOSITORY and a full 40-character GITHUB_SHA/);
+    expect(f.state.calls).toEqual([]);
+  }
+  const f = fixture(t);
+  writeFileSync(
+    join(f.cwd, 'package.json'),
+    JSON.stringify({ name: 'mtg-harness', version: 'bad' }),
+  );
+  expect(() => f.check()).toThrow(/stable three-part version/);
+  expect(f.state.calls).toEqual([]);
 });
 
 test('published releases without the expected completed asset cannot be repaired automatically', (t) => {

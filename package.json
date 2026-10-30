@@ -19,7 +19,8 @@
     "test": "pnpm test:release && pnpm build && pnpm test:e2e",
     "test:release": "vitest run --project release",
     "test:e2e": "vitest run --project e2e",
-    "test:e2e:install": "playwright install chromium",
+    "test:e2e:install": "playwright install chromium --no-shell",
+    "test:e2e:deps": "playwright install-deps chromium",
     "postinstall": "wxt prepare"
   },
   "devDependencies": {

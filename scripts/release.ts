@@ -41,6 +41,8 @@ interface ReleaseOptions {
   env?: ReleaseEnvironment;
   run?: ProcessRunner;
   log?: (message: string) => void;
+  /** Report pending publication without creating or changing remote resources. */
+  checkOnly?: boolean;
 }
 interface ApiOptions {
   missing?: boolean;
@@ -124,7 +126,8 @@ export function release({
   env = process.env,
   run = defaultRunner,
   log = console.log,
-}: ReleaseOptions = {}): { status: 'skipped' | 'published'; tag: string } {
+  checkOnly = false,
+}: ReleaseOptions = {}): { status: 'skipped' | 'published' | 'needed'; tag: string } {
   const { version, tag, asset } = metadata(cwd);
   const repo = env.GITHUB_REPOSITORY ?? '';
   const sha = env.GITHUB_SHA?.toLowerCase() ?? '';
@@ -206,6 +209,7 @@ export function release({
     log(`${tag} is already published with ${asset}; no changes made`);
     return { status: 'skipped', tag };
   }
+  if (checkOnly) return { status: 'needed', tag };
   if (existing && existing.target_commitish?.toLowerCase() !== sha) {
     throw new Error(`Draft ${tag} does not target the tested commit ${sha}`);
   }
@@ -308,10 +312,13 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     if (process.argv.length === 3 && process.argv[2] === '--metadata') {
       const { version, tag } = metadata();
       console.log(`version=${version}\ntag=${tag}`);
+    } else if (process.argv.length === 3 && process.argv[2] === '--check-release') {
+      const result = release({ checkOnly: true, log() {} });
+      console.log(`release_needed=${result.status === 'needed'}`);
     } else if (process.argv.length === 2) {
       release();
     } else {
-      throw new Error('Usage: node scripts/release.ts [--metadata]');
+      throw new Error('Usage: node scripts/release.ts [--metadata | --check-release]');
     }
   } catch (error) {
     console.error(error instanceof Error ? error.message : String(error));

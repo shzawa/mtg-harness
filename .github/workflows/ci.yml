@@ -23,6 +23,8 @@ jobs:
   check:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    outputs:
+      release_needed: ${{ steps.release-plan.outputs.release_needed }}
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
       - name: Install pinned toolchain
@@ -32,15 +34,29 @@ jobs:
           ./bin/mise install --locked
           ./bin/mise env --paths >> "$GITHUB_PATH"
       - run: pnpm install --frozen-lockfile
-      - run: pnpm audit --audit-level high
       - run: node scripts/release.ts --metadata
-      - run: pnpm format:check
-      - run: pnpm lint
-      - run: pnpm typecheck
-      - run: pnpm test:release
+      - name: Plan release without write permissions
+        id: release-plan
+        if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/release.ts --check-release >> "$GITHUB_OUTPUT"
+      - name: Check project and prepare Chromium
+        shell: bash
+        run: |
+          pnpm check &
+          checks_pid=$!
+          pnpm test:e2e:deps &
+          deps_pid=$!
+          pnpm test:e2e:install &
+          browser_pid=$!
+          ci_status=0
+          for ci_pid in "$checks_pid" "$deps_pid" "$browser_pid"; do
+            if ! wait "$ci_pid"; then ci_status=1; fi
+          done
+          exit "$ci_status"
       - run: pnpm zip
       - run: pnpm license:check
-      - run: pnpm test:e2e:install --with-deps
       - run: pnpm test:e2e
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -70,7 +86,7 @@ jobs:
 
   release:
     needs: check
-    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && needs.check.outputs.release_needed == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
