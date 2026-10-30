@@ -71,6 +71,14 @@ Playwright でビルド済み拡張を Chromium に読み込み、閉じる前�
 
 GitHub Actions でも型検査・ビルド・ブラウザテスト・ZIP 作成を実行します。成功した実行の `chrome-extension` アーティファクトから、ビルド済み拡張をダウンロードできます。
 
+実際の URL で参加前のページを確認する場合は、CI を手動実行して `live_url` を指定します。これは通信を差し替えずにページを開き、URL、操作後の確認、キャンセル後のタブ維持を検証します。会議への参加や、マイク・カメラへのアクセス許可は行いません。会議参加中の接続維持は別途確認が必要です。
+
+```sh
+gh workflow run ci.yml -f live_url='https://meet.google.com/meet/your-meeting-code'
+```
+
+結果の JSON とスクリーンショットは、その実行の `live-meet-verification` アーティファクトに保存されます。
+
 ## サイトへのアクセス
 
 スクリプトは `https://meet.google.com/*` のトップレベルのページで実行します。再読み込みせずに `/meet/` 以下へ移動した場合にも対応するためです。確認は閉じる時点の URL が `/meet/` で始まる場合だけに限定します。
