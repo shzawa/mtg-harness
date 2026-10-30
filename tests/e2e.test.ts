@@ -20,10 +20,15 @@ let keeperPage: Page | undefined;
 
 async function openPage(
   url: string,
-  { interact = true }: { interact?: boolean } = {},
+  { interact = true, html }: { interact?: boolean; html?: string } = {},
 ): Promise<Page> {
   if (!context) throw new Error('The test browser context has not been initialized');
   const page = await context.newPage();
+  if (html !== undefined) {
+    await page.route('https://**/*', (route) =>
+      route.fulfill({ contentType: 'text/html', body: html }),
+    );
+  }
   await page.goto(url);
   if (interact) await page.locator('#interact').click();
   return page;
@@ -173,4 +178,75 @@ describe('MTG Harness built Chrome extension', { concurrent: false }, () => {
     const page = await openPage('https://meet.google.com/meet/no-interaction', { interact: false });
     await closeWithoutConfirmation(page);
   }, 10_000);
+
+  it('allows closing a newly loaded document with the visible Japanese left-meeting heading', async () => {
+    const page = await openPage('https://meet.google.com/meet/already-left', {
+      html: fixture.replace(
+        '</body>',
+        '<h1 style="white-space: pre"> \n<span>ミーティングから退出しました</span>\n </h1></body>',
+      ),
+    });
+    await closeWithoutConfirmation(page);
+  }, 15_000);
+
+  it('allows closing after the left-meeting heading appears following a canceled close', async () => {
+    const page = await openPage('https://meet.google.com/meet/leave-after-cancel');
+    await closeWithConfirmation(page, 'dismiss');
+    await page.evaluate(() => {
+      document.body.insertAdjacentHTML('beforeend', '<h1>ミーティングから退出しました</h1>');
+    });
+    await closeWithoutConfirmation(page);
+  }, 15_000);
+
+  it('restores confirmation when the left-meeting heading is removed or replaced on rejoin', async () => {
+    const url = 'https://meet.google.com/meet/rejoin';
+    for (const change of ['remove', 'replace']) {
+      const page = await openPage(url, {
+        html: fixture.replace('</body>', '<h1>ミーティングから退出しました</h1></body>'),
+      });
+      await page.evaluate((change) => {
+        const heading = document.querySelector('h1');
+        if (!heading) throw new Error('The fixture has no left-meeting heading');
+        if (change === 'remove') {
+          heading.remove();
+        } else {
+          const activeHeading = document.createElement('h1');
+          activeHeading.textContent = 'ミーティングに参加中';
+          heading.replaceWith(activeHeading);
+        }
+      }, change);
+      expect(page.url()).toBe(url);
+      await closeWithConfirmation(page, 'accept');
+    }
+  }, 20_000);
+
+  it('keeps confirmation for non-h1, similar Japanese, and English left-meeting text', async () => {
+    for (const heading of [
+      '<h2>ミーティングから退出しました</h2>',
+      '<h1>ミーティングから退出しました。</h1>',
+      '<h1>You left the meeting</h1>',
+    ]) {
+      const page = await openPage('https://meet.google.com/meet/other-text', {
+        html: fixture.replace('</body>', `${heading}</body>`),
+      });
+      await closeWithConfirmation(page, 'accept');
+    }
+  }, 20_000);
+
+  it('keeps confirmation when the matching heading or its ancestor is hidden', async () => {
+    for (const heading of [
+      '<h1 hidden>ミーティングから退出しました</h1>',
+      '<h1 style="display: none">ミーティングから退出しました</h1>',
+      '<h1 style="visibility: hidden">ミーティングから退出しました</h1>',
+      '<div hidden><h1>ミーティングから退出しました</h1></div>',
+      '<div style="visibility: hidden"><h1>ミーティングから退出しました</h1></div>',
+      '<div style="opacity: 0"><h1>ミーティングから退出しました</h1></div>',
+      '<div style="content-visibility: hidden"><h1>ミーティングから退出しました</h1></div>',
+    ]) {
+      const page = await openPage('https://meet.google.com/meet/hidden-heading', {
+        html: fixture.replace('</body>', `${heading}</body>`),
+      });
+      await closeWithConfirmation(page, 'accept');
+    }
+  }, 20_000);
 });

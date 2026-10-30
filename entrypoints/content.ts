@@ -17,6 +17,20 @@ export default defineContentScript({
           return;
         }
 
+        // Recheck the current screen so rejoining restores protection immediately.
+        if (
+          Array.from(document.querySelectorAll('h1')).some(
+            (heading) =>
+              heading.checkVisibility?.({
+                visibilityProperty: true,
+                opacityProperty: true,
+                contentVisibilityAuto: true,
+              }) && heading.innerText.trim() === 'ミーティングから退出しました',
+          )
+        ) {
+          return;
+        }
+
         // During unload, the browser supplies the dialog and its message.
         event.preventDefault();
         event.returnValue = true;

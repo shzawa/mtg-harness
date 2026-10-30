@@ -101,6 +101,7 @@ function notes(version: string, asset: string): string {
   return `# MTG Harness ${version}
 
 Google Meet の /meet/ で始まるページを閉じる前に、ブラウザ標準の確認を表示します。
+日本語の退出後画面では、表示中の h1 が「ミーティングから退出しました」と一致した場合だけ、この拡張の確認を省略します。再参加してこの見出しが消えると、確認が再び有効になります。
 
 ## インストール
 
