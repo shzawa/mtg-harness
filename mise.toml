@@ -1,0 +1,37 @@
+[tools]
+node = "24.22.1"
+pnpm = "{{ read_json(path=config_root ~ '/package.json')['packageManager'] | split(pat='@') | last }}"
+gh = "2.103.3"
+
+[tool_config]
+locked = true
+
+[tasks.setup]
+description = "Install project dependencies from the lockfile"
+run = "pnpm install --frozen-lockfile"
+
+[tasks.check]
+description = "Audit, format, lint, typecheck, and test release automation"
+run = [
+  "pnpm audit --audit-level high",
+  "pnpm format:check",
+  "pnpm lint",
+  "pnpm typecheck",
+  "pnpm test:release",
+]
+
+[tasks.build]
+description = "Build the Chrome/Edge extension"
+run = "pnpm build"
+
+[tasks.zip]
+description = "Package the Chrome/Edge extension"
+run = "pnpm zip"
+
+[tasks.test]
+description = "Run release and browser tests (install Playwright Chromium first)"
+run = "pnpm test"
+
+[tasks.dev]
+description = "Start WXT development mode"
+run = "pnpm dev"
