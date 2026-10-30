@@ -14,10 +14,12 @@
     "lint:fix": "oxlint --fix --deny-warnings",
     "format": "oxfmt --write",
     "format:check": "oxfmt --check",
+    "check": "pnpm audit --audit-level high && pnpm format:check && pnpm lint && pnpm typecheck && pnpm test:release",
     "typecheck": "tsc --noEmit && tsc --project tsconfig.node.json",
     "test": "pnpm test:release && pnpm build && pnpm test:e2e",
     "test:release": "vitest run --project release",
     "test:e2e": "vitest run --project e2e",
+    "test:e2e:install": "playwright install chromium",
     "postinstall": "wxt prepare"
   },
   "devDependencies": {

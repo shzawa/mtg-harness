@@ -28,18 +28,20 @@ jobs:
       - name: Install pinned toolchain
         env:
           MISE_GITHUB_TOKEN: ${{ github.token }}
-        run: ./bin/mise install --locked
-      - run: ./bin/setup
-      - run: ./bin/mise exec -- pnpm audit --audit-level high
-      - run: ./bin/mise exec -- node scripts/release.ts --metadata
-      - run: ./bin/mise exec -- pnpm format:check
-      - run: ./bin/mise exec -- pnpm lint
-      - run: ./bin/mise exec -- pnpm typecheck
-      - run: ./bin/mise exec -- pnpm test:release
-      - run: ./bin/zip
-      - run: ./bin/mise exec -- pnpm license:check
-      - run: ./bin/mise exec -- pnpm exec playwright install --with-deps chromium
-      - run: ./bin/mise exec -- pnpm test:e2e
+        run: |
+          ./bin/mise install --locked
+          ./bin/mise env --paths >> "$GITHUB_PATH"
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm audit --audit-level high
+      - run: node scripts/release.ts --metadata
+      - run: pnpm format:check
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm test:release
+      - run: pnpm zip
+      - run: pnpm license:check
+      - run: pnpm test:e2e:install --with-deps
+      - run: pnpm test:e2e
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: chrome-extension
@@ -57,7 +59,7 @@ jobs:
         if: github.event_name == 'workflow_dispatch' && inputs.live_url != ''
         env:
           LIVE_MEET_URL: ${{ inputs.live_url }}
-        run: ./bin/mise exec -- node scripts/check-live-url.ts
+        run: node scripts/check-live-url.ts
       - name: Upload live page verification
         if: always() && github.event_name == 'workflow_dispatch' && inputs.live_url != ''
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -81,7 +83,9 @@ jobs:
       - name: Install pinned toolchain
         env:
           MISE_GITHUB_TOKEN: ${{ github.token }}
-        run: ./bin/mise install --locked
+        run: |
+          ./bin/mise install --locked
+          ./bin/mise env --paths >> "$GITHUB_PATH"
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: release-package
@@ -89,4 +93,4 @@ jobs:
       - name: Publish versioned GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: ./bin/mise exec -- node scripts/release.ts
+        run: node scripts/release.ts

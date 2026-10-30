@@ -2,7 +2,7 @@
 
 ## Repository tooling
 
-`bin/mise`、`bin/mise.cmd` と `bin/` 内のタスク起動スクリプトは、mise 2026.10.23 が生成したコードを含みます。
+`bin/mise` と `bin/mise.cmd` は、mise 2026.10.23 が生成したコードを含みます。
 
 - Upstream: [jdx/mise v2026.10.23](https://github.com/jdx/mise/tree/v2026.10.23)
 - License: MIT

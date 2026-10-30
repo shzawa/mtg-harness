@@ -17,17 +17,31 @@ Google Meet の対象ページを誤って閉じてしまい、会議から離�
 
 Node.js・pnpm・GitHub CLI は [mise](https://mise.jdx.dev/) で管理します。[公式 Tips](https://mise.jdx.dev/tips-and-tricks.html#let-contributors-run-tasks-without-installing-mise) に沿った `bin/mise` が、固定バージョンの mise をチェックサム検証して取得します。mise や Node.js を事前にインストールする必要はありません。macOS／Linux では Git、Bash、curl または wget、tar、shasum または sha256sum が必要です。
 
+以下は zsh での初回セットアップです。
+
 ```sh
 git clone https://github.com/shzawa/mtg-harness.git
 cd mtg-harness
 ./bin/mise install --locked
-./bin/setup
-./bin/build
+eval "$(./bin/mise env -s zsh)"
+pnpm install --frozen-lockfile
+pnpm build
 ```
 
-Node.js・GitHub CLI は `mise.toml` に固定し、pnpm は `package.json` の `packageManager` を mise から参照します。取得 URL とチェックサムは `mise.lock` に記録しています。ツール・キャッシュ・状態はプロジェクトの `.mise/` に保存します。以下のコマンドはリポジトリ直下で実行してください。Windows では `./bin/setup` などを `.\bin\setup.cmd` に、`./bin/mise` を `.\bin\mise.cmd` に読み替えます。
+Node.js・GitHub CLI は `mise.toml` に固定し、pnpm は `package.json` の `packageManager` を mise から参照します。取得 URL とチェックサムは `mise.lock` に記録しています。ツール・キャッシュ・状態はプロジェクトの `.mise/` に保存します。以下のコマンドはリポジトリ直下で実行してください。
 
-任意のコマンドをこの環境で動かす場合は `./bin/mise exec -- pnpm <command>` を使います。シェルに読み込む場合は、zsh なら `eval "$(./bin/mise env -s zsh)"` を実行すると、同じセッションで直接 `node`・`pnpm`・`gh` を使えます。CI 用スクリプトは Node.js 標準の TypeScript 実行機能で、テストは Vitest で実行します。
+新しいターミナルを開いたら、リポジトリ直下で `eval "$(./bin/mise env -s zsh)"` を一度実行してください。Bash では `eval "$(./bin/mise env -s bash)"` を使います。同じセッションで `node`・`pnpm`・`gh` を直接使えるようになります。すでに mise をシェルに組み込んでいる場合は、このリポジトリの固定ツールが有効になっていれば env の実行は不要です。
+
+Windows の PowerShell では、初回セットアップを次のように実行します。新しいターミナルでは、リポジトリ直下で2行目の env コマンドを実行してください。
+
+```powershell
+.\bin\mise.cmd install --locked
+.\bin\mise.cmd env -s pwsh | Out-String | Invoke-Expression
+pnpm install --frozen-lockfile
+pnpm build
+```
+
+開発コマンドは `package.json` の scripts にまとめています。CI 用スクリプトは Node.js 標準の TypeScript 実行機能で、テストは Vitest で実行します。
 
 Chrome で `chrome://extensions`（Edge は `edge://extensions`）を開き、「デベロッパー モード」をオンにします。「パッケージ化されていない拡張機能を読み込む」から `.output/chrome-mv3` フォルダを選択してください。リポジトリ直下ではなく、ビルド済みのフォルダを選びます。このフォルダはインストール後も保管してください。
 
@@ -68,19 +82,30 @@ Chrome で `chrome://extensions`（Edge は `edge://extensions`）を開き、�
 ## 開発
 
 ```sh
-./bin/dev   # 開発ビルドとブラウザ起動
-./bin/check # 監査・整形チェック・lint・型検査・Release 処理のテスト
-./bin/build # Chrome/Edge 向け Manifest V3 ビルド
-./bin/zip   # 配布用 ZIP を .output/ に作成
-./bin/mise exec -- pnpm lint:fix # Oxlint の自動修正
-./bin/mise exec -- pnpm format   # Oxfmt で整形
+pnpm dev       # 開発ビルドとブラウザ起動
+pnpm check     # 監査・整形チェック・lint・型検査・Release 処理のテスト
+pnpm build     # Chrome/Edge 向け Manifest V3 ビルド
+pnpm zip       # 配布用 ZIP を .output/ に作成
+pnpm lint:fix  # Oxlint の自動修正
+pnpm format    # Oxfmt で整形
+pnpm typecheck # 型検査
 ```
 
 lint は [Oxlint](https://oxc.rs/docs/guide/usage/linter.html)、format は [Oxfmt](https://oxc.rs/docs/guide/usage/formatter.html) を使用します。型検査は WXT 用と Node.js 用の TypeScript 設定で行います。
 
 開発用フォルダは `.output/chrome-mv3-dev` です。拡張の動作確認には、本番ビルドの `.output/chrome-mv3` を使ってください。
 
-Node.js・GitHub CLI の更新は `mise.toml`、pnpm の更新は `package.json` の `packageManager` を変更し、`./bin/mise lock`、`./bin/mise install --locked`、`./bin/setup` を順に実行して検証します。設定と `mise.lock` を一緒にコミットしてください。`mise.lock` は macOS（arm64／x64）・Linux（arm64／x64）・Windows（x64）用です。mise 本体の更新は、新しい mise で `generate install-script --version <version> --localize --write bin/mise --windows` を再実行し、タスクの追加・変更時は `./bin/mise generate task-stubs --mise-bin ./bin/mise` で `bin/` を更新します。
+Node.js・GitHub CLI の更新は `mise.toml`、pnpm の更新は `package.json` の `packageManager` を変更し、次の順で反映・検証します。ツールのインストール後に env を再実行して、更新したツールをシェルへ反映してください。
+
+```sh
+./bin/mise lock
+./bin/mise install --locked
+eval "$(./bin/mise env -s zsh)"
+pnpm install --frozen-lockfile
+pnpm check
+```
+
+Bash／PowerShell ではセットアップ時と同じ env コマンドを使います。設定と `mise.lock` を一緒にコミットしてください。`mise.lock` は macOS（arm64／x64）・Linux（arm64／x64）・Windows（x64）用です。mise 本体の更新は、新しい mise で `generate install-script --version <version> --localize --write bin/mise --windows` を再実行します。
 
 ## 依存パッケージの安全性
 
@@ -89,33 +114,33 @@ Node.js・GitHub CLI の更新は `mise.toml`、pnpm の更新は `package.json`
 - 直接・間接依存とも公開から48時間未満のバージョンを拒否します。公開日時を確認できない場合も停止し、既存の lockfile も検査します。
 - 過去の公開に比べて provenance や trusted publishing などの信頼性が下がったバージョンを拒否します。間接依存の Git／任意 URL からの取得も制限します。
 - 未承認の依存パッケージの install スクリプトがあると停止します。`fsevents` のビルドは明示的に禁止し、実行を許可した依存パッケージはありません。プロジェクト自身の `postinstall`（`wxt prepare`）は実行します。
-- ストアの整合性を確認し、インストールの省略を無効にしています。依存状態が古いままの `pnpm run`／`pnpm exec` は停止するため、先に `./bin/setup` を実行してください。
+- ストアの整合性を確認し、インストールの省略を無効にしています。依存状態が古いままの `pnpm run`／`pnpm exec` は停止するため、先に `pnpm install --frozen-lockfile` を実行してください。
 
 新しい依存に install スクリプトが必要な場合は、対象バージョンとスクリプトを確認してから `allowBuilds` に個別の許可を追加してください。更新が48時間の待機期間に該当した場合は、待機後に再実行します。これらはリスクを下げる仕組みであり、パッケージの安全性を保証するものではありません。設定の詳細は [pnpm のサプライチェーン対策](https://pnpm.io/supply-chain-security)を参照してください。
 
-CI は `pnpm audit --audit-level high` で High／Critical の既知の脆弱性が見つかると停止します。低い重大度も含めて確認するには `./bin/mise exec -- pnpm audit` を実行します。監査の通信エラーや修正版のない問題を一括で無視する設定は使っていません。
+CI は `pnpm audit --audit-level high` で High／Critical の既知の脆弱性が見つかると停止します。低い重大度も含めて確認するには `pnpm audit` を実行します。監査の通信エラーや修正版のない問題を一括で無視する設定は使っていません。
 
 2026-10-30 の監査では、開発依存の `deepmerge` に修正版未公開の Low が1件あります（[GHSA-gcqx-w48m-w2h4](https://github.com/advisories/GHSA-gcqx-w48m-w2h4)）。除外リストには登録していません。
 
 ## テスト
 
 ```sh
-./bin/mise exec -- pnpm exec playwright install chromium
-./bin/test
+pnpm test:e2e:install
+pnpm test
 ```
 
 テストランナーは Vitest です。`release` プロジェクトで Release 処理を、`e2e` プロジェクトで Playwright を使ったブラウザ動作を検証します。
 
 ブラウザテストは、ビルド済み拡張を Chromium に読み込み、閉じる前の確認、キャンセル後の再確認、更新・遷移、対象 URL の境界、再読み込みなしの URL 変更、日本語の退出後画面での省略と再参加時の保護復帰を検証します。テスト用ページは通信を差し替えて配信するため、Google アカウントや実際の会議は不要です。実際の Google Meet 会議での確認は別途行ってください。
 
-`./bin/mise exec -- pnpm test:release` で Release テストだけを、ビルド後の `./bin/mise exec -- pnpm test:e2e` でブラウザテストだけを実行できます。
+`pnpm test:release` で Release テストだけを、ビルド後の `pnpm test:e2e` でブラウザテストだけを実行できます。
 
 GitHub Actions でも同じ `bin/mise` と `mise.lock` でツールを取得し、依存パッケージの監査・format・lint・型検査・ビルド・ブラウザテスト・ZIP 作成を実行します。成功した実行の `chrome-extension` アーティファクトから、ビルド済み拡張をダウンロードできます。
 
 実際の URL で参加前のページを確認する場合は、CI を手動実行して `live_url` を指定します。これは通信を差し替えずにページを開き、URL、操作後の確認、キャンセル後のタブ維持を検証します。会議への参加や、マイク・カメラへのアクセス許可は行いません。会議参加中の接続維持は別途確認が必要です。
 
 ```sh
-./bin/mise exec -- gh workflow run ci.yml -f live_url='https://meet.google.com/meet/your-meeting-code'
+gh workflow run ci.yml -f live_url='https://meet.google.com/meet/your-meeting-code'
 ```
 
 結果の JSON とスクリーンショットは、その実行の `live-meet-verification` アーティファクトに保存されます。
@@ -127,7 +152,7 @@ GitHub Actions でも同じ `bin/mise` と `mise.lock` でツールを取得し�
 バージョンの更新には、次のコマンドを使います。
 
 ```sh
-./bin/mise exec -- pnpm version patch --no-git-tag-version
+pnpm version patch --no-git-tag-version
 git add package.json pnpm-lock.yaml
 git commit -m "chore: bump extension version"
 git push origin main
@@ -156,7 +181,7 @@ CI は `pnpm license:check` で ZIP 内の全文表記を確認します。バ�
 開発依存を含むインストール済みパッケージ全体のライセンス情報は、次のコマンドで確認できます。この一覧は配布バンドルに含まれるパッケージの一覧とは異なります。
 
 ```sh
-./bin/mise exec -- pnpm licenses list --json
+pnpm licenses list --json
 ```
 
 ## 参考資料
