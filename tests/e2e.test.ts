@@ -1,11 +1,10 @@
-import assert from 'node:assert/strict';
 import { access, mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { after, afterEach, before, describe, it } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
 import type { BrowserContext, Dialog, Page } from 'playwright';
+import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 
 type DialogDecision = 'accept' | 'dismiss';
 type FixtureWindow = Window & { fixtureMarker?: string };
@@ -20,7 +19,7 @@ let profilePath: string | undefined;
 let keeperPage: Page | undefined;
 
 async function openPage(url: string, { interact = true }: { interact?: boolean } = {}): Promise<Page> {
-  assert.ok(context, 'The test browser context has not been initialized');
+  if (!context) throw new Error('The test browser context has not been initialized');
   const page = await context.newPage();
   await page.goto(url);
   if (interact) await page.locator('#interact').click();
@@ -37,7 +36,7 @@ async function closeWithConfirmation(page: Page, decision: DialogDecision): Prom
     .then(async (dialog) => {
       const type = dialog.type();
       await dialog[decision]();
-      assert.equal(type, 'beforeunload');
+      expect(type).toBe('beforeunload');
     });
 
   await Promise.all([
@@ -46,9 +45,9 @@ async function closeWithConfirmation(page: Page, decision: DialogDecision): Prom
     page.close({ runBeforeUnload: true }),
   ]);
 
-  assert.equal(page.isClosed(), decision === 'accept');
+  expect(page.isClosed()).toBe(decision === 'accept');
   if (decision === 'dismiss') {
-    assert.equal(await page.title(), 'Meet guard fixture');
+    expect(await page.title()).toBe('Meet guard fixture');
   }
 }
 
@@ -61,7 +60,7 @@ async function closeWithoutConfirmation(page: Page): Promise<void> {
   });
   const closed = page.waitForEvent('close', { timeout: eventTimeout });
   await Promise.all([closed, page.close({ runBeforeUnload: true })]);
-  assert.deepEqual(dialogs, [], 'The extension must not request confirmation here');
+  expect(dialogs, 'The extension must not request confirmation here').toEqual([]);
 }
 
 async function cancelNavigation(page: Page, triggerNavigation: () => Promise<unknown>): Promise<void> {
@@ -69,15 +68,15 @@ async function cancelNavigation(page: Page, triggerNavigation: () => Promise<unk
     .then(async (dialog) => {
       const type = dialog.type();
       await dialog.dismiss();
-      assert.equal(type, 'beforeunload');
+      expect(type).toBe('beforeunload');
     });
   // Trigger the document API directly: a canceled navigation has no load event
   // for page.reload()/page.goto() to wait for. Unexpected failures still reject.
   await Promise.all([handledDialog, triggerNavigation()]);
 }
 
-describe('MTG Harness built Chrome extension', { concurrency: false }, () => {
-  before(async () => {
+describe('MTG Harness built Chrome extension', { concurrent: false }, () => {
+  beforeAll(async () => {
     await access(join(extensionPath, 'manifest.json'));
     profilePath = await mkdtemp(join(tmpdir(), 'mtg-harness-e2e-'));
     context = await chromium.launchPersistentContext(profilePath, {
@@ -97,7 +96,7 @@ describe('MTG Harness built Chrome extension', { concurrency: false }, () => {
       contentType: 'text/html',
       body: fixture,
     }));
-  }, { timeout: 30_000 });
+  }, 30_000);
 
   afterEach(async () => {
     if (context) {
@@ -105,7 +104,7 @@ describe('MTG Harness built Chrome extension', { concurrency: false }, () => {
     }
   });
 
-  after(async () => {
+  afterAll(async () => {
     try {
       await context?.close();
     } finally {
@@ -113,27 +112,27 @@ describe('MTG Harness built Chrome extension', { concurrency: false }, () => {
     }
   });
 
-  it('keeps a protected tab on cancel, asks again, then closes on approval', { timeout: 15_000 }, async () => {
+  it('keeps a protected tab on cancel, asks again, then closes on approval', async () => {
     const page = await openPage('https://meet.google.com/meet/example?authuser=1#section');
     await closeWithConfirmation(page, 'dismiss');
     await closeWithConfirmation(page, 'accept');
-  });
+  }, 15_000);
 
-  it('also allows canceling reload and cross-document navigation', { timeout: 15_000 }, async () => {
+  it('also allows canceling reload and cross-document navigation', async () => {
     const url = 'https://meet.google.com/meet/';
     const page = await openPage(url);
     await page.evaluate(() => { (window as FixtureWindow).fixtureMarker = 'original document'; });
 
     await cancelNavigation(page, () => page.evaluate(() => window.location.reload()));
-    assert.equal(page.url(), url);
-    assert.equal(await page.evaluate(() => (window as FixtureWindow).fixtureMarker), 'original document');
+    expect(page.url()).toBe(url);
+    expect(await page.evaluate(() => (window as FixtureWindow).fixtureMarker)).toBe('original document');
 
     await cancelNavigation(page, () => page.evaluate(() => window.location.assign('https://example.com/away')));
-    assert.equal(page.url(), url);
-    assert.equal(await page.evaluate(() => (window as FixtureWindow).fixtureMarker), 'original document');
-  });
+    expect(page.url()).toBe(url);
+    expect(await page.evaluate(() => (window as FixtureWindow).fixtureMarker)).toBe('original document');
+  }, 15_000);
 
-  it('does not protect the home page, ordinary meetings, /meet, or another origin', { timeout: 20_000 }, async () => {
+  it('does not protect the home page, ordinary meetings, /meet, or another origin', async () => {
     for (const url of [
       'https://meet.google.com/',
       'https://meet.google.com/abc-defg-hij',
@@ -142,19 +141,19 @@ describe('MTG Harness built Chrome extension', { concurrency: false }, () => {
     ]) {
       await closeWithoutConfirmation(await openPage(url));
     }
-  });
+  }, 20_000);
 
-  it('uses the current URL after SPA transitions into and out of /meet/', { timeout: 15_000 }, async () => {
+  it('uses the current URL after SPA transitions into and out of /meet/', async () => {
     const page = await openPage('https://meet.google.com/');
     await page.evaluate(() => history.pushState({}, '', '/meet/from-spa?authuser=1#section'));
     await closeWithConfirmation(page, 'dismiss');
 
     await page.evaluate(() => history.replaceState({}, '', '/abc-defg-hij'));
     await closeWithoutConfirmation(page);
-  });
+  }, 15_000);
 
-  it('does not show a dialog before the page has received a user interaction', { timeout: 10_000 }, async () => {
+  it('does not show a dialog before the page has received a user interaction', async () => {
     const page = await openPage('https://meet.google.com/meet/no-interaction', { interact: false });
     await closeWithoutConfirmation(page);
-  });
+  }, 10_000);
 });

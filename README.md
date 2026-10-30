@@ -15,7 +15,7 @@ Google Meet の対象ページを誤って閉じてしまい、会議から離�
 
 ## セットアップとビルド
 
-Node.js 24 以上と npm が必要です。CI 用スクリプトとテストは、Node.js 標準の TypeScript 実行機能を使います。
+Node.js 24 以上と npm が必要です。CI 用スクリプトは Node.js 標準の TypeScript 実行機能で、テストは Vitest で実行します。
 
 ```sh
 gh repo clone shzawa/mtg-harness
@@ -77,7 +77,11 @@ npm run typecheck
 npm test
 ```
 
-Playwright でビルド済み拡張を Chromium に読み込み、閉じる前の確認、キャンセル後の再確認、更新・遷移、対象 URL の境界、再読み込みなしの URL 変更を検証します。テスト用ページは通信を差し替えて配信するため、Google アカウントや実際の会議は不要です。実際の Google Meet 会議での確認は別途行ってください。
+テストランナーは Vitest です。`release` プロジェクトで Release 処理を、`e2e` プロジェクトで Playwright を使ったブラウザ動作を検証します。
+
+ブラウザテストは、ビルド済み拡張を Chromium に読み込み、閉じる前の確認、キャンセル後の再確認、更新・遷移、対象 URL の境界、再読み込みなしの URL 変更を検証します。テスト用ページは通信を差し替えて配信するため、Google アカウントや実際の会議は不要です。実際の Google Meet 会議での確認は別途行ってください。
+
+`npm run test:release` で Release テストだけを、ビルド後の `npm run test:e2e` でブラウザテストだけを実行できます。
 
 GitHub Actions でも型検査・ビルド・ブラウザテスト・ZIP 作成を実行します。成功した実行の `chrome-extension` アーティファクトから、ビルド済み拡張をダウンロードできます。
 

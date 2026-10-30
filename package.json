@@ -13,8 +13,8 @@
     "zip": "wxt zip",
     "typecheck": "tsc --noEmit && tsc --project tsconfig.node.json",
     "test": "npm run test:release && npm run build && npm run test:e2e",
-    "test:release": "node --test tests/release.test.ts",
-    "test:e2e": "node --test tests/e2e.test.ts",
+    "test:release": "vitest run --project release",
+    "test:e2e": "vitest run --project e2e",
     "postinstall": "wxt prepare"
   },
   "devDependencies": {
@@ -22,6 +22,7 @@
     "playwright": "1.64.1",
     "typescript": "5.9.3",
     "vite": "8.3.5",
+    "vitest": "5.0.5",
     "web-ext": "10.8.0",
     "wxt": "0.21.5"
   }
