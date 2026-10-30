@@ -48,7 +48,11 @@ function fixture(t, options = {}) {
       const method = args[args.indexOf('--method') + 1];
       if (state.apiErrors[path]) return state.apiErrors[path];
       if (path.endsWith('/releases/tags/v1.0.0')) return state.release && !state.release.draft ? http(state.release) : http({}, 404);
-      if (path.includes('/releases?')) return http(state.release ? [state.release] : []);
+      if (path === 'graphql') {
+        assert.ok(args.some((arg) => arg.includes('release(tagName:$tag){databaseId isDraft}')));
+        assert.ok(args.includes('owner=owner') && args.includes('name=repo') && args.includes('tag=v1.0.0'));
+        return http({ data: { repository: { release: state.release && !state.hideDraftFromGraphql ? { databaseId: 1, isDraft: state.release.draft } : null } } });
+      }
       if (path.endsWith('/releases/latest')) return state.latest ? http(state.latest) : http({}, 404);
       if (path.endsWith('/git/ref/tags/v1.0.0')) return state.ref ? http(state.ref) : http({}, 404);
       if (path.includes('/git/tags/')) return http(state.tagObjects[path.split('/').at(-1)]);
@@ -60,6 +64,15 @@ function fixture(t, options = {}) {
         return http(state.ref, 201);
       }
       if (path.endsWith('/releases/1')) return http(state.release);
+      if (path.endsWith('/releases') && method === 'POST') {
+        for (const field of ['tag_name=v1.0.0', `target_commitish=${sha}`, 'name=v1.0.0', 'draft=true', 'prerelease=false']) assert.ok(args.includes(field));
+        const notesFile = args.find((arg) => arg.startsWith('body=@')).slice('body=@'.length);
+        const notes = readFileSync(notesFile, 'utf8');
+        assert.ok(notes.includes(assetName) && notes.includes('自動更新には対応しません'));
+        state.release = { id: 1, tag_name: tag, draft: true, prerelease: false, target_commitish: sha, assets: [] };
+        state.mutations.push('create');
+        return http(state.createdResponse ?? state.release, 201);
+      }
       assert.fail(`Unexpected API call ${method} ${path}`);
     }
     assert.equal(args[0], 'release');
@@ -67,12 +80,7 @@ function fixture(t, options = {}) {
     assert.ok(args.includes('--repo'));
     assert.ok(args.includes('owner/repo'));
     const action = args[1];
-    if (action === 'create') {
-      for (const flag of ['--draft', '--verify-tag', '--target', sha]) assert.ok(args.includes(flag));
-      const notes = readFileSync(args[args.indexOf('--notes-file') + 1], 'utf8');
-      assert.ok(notes.includes(assetName) && notes.includes('自動更新には対応しません'));
-      state.release = { id: 1, tag_name: tag, draft: true, prerelease: false, target_commitish: sha, assets: [] };
-    } else if (action === 'upload') {
+    if (action === 'upload') {
       assert.equal(args[3], zip);
       assert.ok(!args.includes('--clobber'));
       if (state.uploadFails) return { status: 1, stdout: '', stderr: 'upload network failure' };
@@ -111,9 +119,18 @@ test('auth, rate-limit, server, and network failures are never treated as missin
     assert.throws(() => f.publish(), new RegExp(`HTTP ${status}`));
     assert.deepEqual(f.state.mutations, []);
   }
-  const f = fixture(t, { apiErrors: { 'repos/owner/repo/releases?per_page=100&page=1': { status: 1, stdout: '', stderr: 'network timeout' } } });
+  const f = fixture(t, { apiErrors: { graphql: { status: 1, stdout: '', stderr: 'network timeout' } } });
   assert.throws(() => f.publish(), /HTTP unknown/);
   assert.deepEqual(f.state.mutations, []);
+});
+
+test('HTTP 200 GraphQL errors and an inaccessible repository cannot become a missing draft', (t) => {
+  const f = fixture(t, { apiErrors: { graphql: http({ errors: [{ message: 'Resource not accessible by integration' }], data: { repository: null } }) } });
+  assert.throws(() => f.publish(), /GraphQL Release lookup failed: Resource not accessible/);
+  assert.deepEqual(f.state.mutations, []);
+  const inaccessible = fixture(t, { apiErrors: { graphql: http({ data: { repository: null } }) } });
+  assert.throws(() => inaccessible.publish(), /did not return the repository/);
+  assert.deepEqual(inaccessible.state.mutations, []);
 });
 
 test('published releases with the asset remain unchanged even when main has advanced', (t) => {
@@ -148,11 +165,18 @@ test('a preexisting tag at another commit fails before creating or uploading a r
 });
 
 test('a first release creates the tested tag, draft, ZIP upload, then publishes', (t) => {
-  const f = fixture(t);
+  const f = fixture(t, { hideDraftFromGraphql: true });
   assert.deepEqual(f.publish(), { status: 'published', tag });
   assert.deepEqual(f.state.mutations, ['create-tag', 'create', 'upload', 'edit']);
   assert.equal(f.state.release.draft, false);
   assert.equal(f.state.ref.object.sha, sha);
+  assert.equal(f.state.calls.filter((call) => call[0] === 'gh' && call.includes('graphql')).length, 1, 'The created draft is verified from its API response instead of rediscovered');
+});
+
+test('invalid creation metadata fails with diagnostic fields before uploading or publishing', (t) => {
+  const f = fixture(t, { createdResponse: { id: 1, tag_name: tag, draft: true, target_commitish: otherSha } });
+  assert.throws(() => f.publish(), /created draft could not be verified \(id=1, draft=true, target=b{40}\)/);
+  assert.deepEqual(f.state.mutations, ['create-tag', 'create']);
 });
 
 test('an increased version publishes after an existing stable release', (t) => {
@@ -185,6 +209,8 @@ test('same-commit draft recovery uploads only a missing asset, never clobbering 
     });
     f.publish();
     assert.deepEqual(f.state.mutations, assets.length === 1 && assets[0].size === 9999 ? ['edit'] : ['upload', 'edit']);
+    assert.ok(f.state.calls.some((call) => call.includes('graphql')));
+    assert.equal(f.state.calls.filter((call) => call.includes('repos/owner/repo/releases/1')).length, 2, 'GraphQL databaseId resolves the draft before its final publish check');
   }
 });
 

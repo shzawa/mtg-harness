@@ -71,13 +71,18 @@ export function release({ cwd = process.cwd(), env = process.env, run = defaultR
   const findRelease = () => {
     const published = api(`${base}/releases/tags/${tag}`, { missing: true });
     if (published) return published;
-    // Pending draft tags are not returned by the REST tag lookup.
-    for (let page = 1; ; page++) {
-      const releases = api(`${base}/releases?per_page=100&page=${page}`);
-      const found = releases.find((item) => item.tag_name === tag);
-      if (found) return found;
-      if (releases.length < 100) return null;
-    }
+    // Match gh's pending-draft lookup: REST tag/list results may omit drafts.
+    const [owner, name] = repo.split('/');
+    const result = api('graphql', { method: 'POST', fields: [
+      '-f', 'query=query($owner:String!,$name:String!,$tag:String!){repository(owner:$owner,name:$name){release(tagName:$tag){databaseId isDraft}}}',
+      '-f', `owner=${owner}`, '-f', `name=${name}`, '-f', `tag=${tag}`,
+    ] });
+    if (result.errors?.length) throw new Error(`GraphQL Release lookup failed: ${result.errors.map((error) => error.message).join('; ')}`);
+    if (!result.data?.repository) throw new Error('GraphQL Release lookup did not return the repository');
+    const found = result.data.repository.release;
+    if (!found) return null;
+    if (!Number.isSafeInteger(found.databaseId) || found.databaseId <= 0) throw new Error('GraphQL Release lookup returned an invalid ID');
+    return api(`${base}/releases/${found.databaseId}`);
   };
   const hasAsset = (item) => item.assets?.some((file) => file.name === asset && file.state === 'uploaded' && file.size > 0);
   let existing = findRelease();
@@ -124,9 +129,14 @@ export function release({ cwd = process.cwd(), env = process.env, run = defaultR
     if (!existing) {
       const notesFile = join(temp, 'release-notes.md');
       writeFileSync(notesFile, notes(version, asset));
-      command('gh', ['release', 'create', tag, '--repo', repo, '--draft', '--verify-tag', '--target', sha, '--title', tag, '--notes-file', notesFile]);
-      existing = findRelease();
-      if (!existing?.draft || existing.target_commitish?.toLowerCase() !== sha) throw new Error('The created draft could not be verified');
+      // Use the creation response instead of immediately rediscovering the draft.
+      existing = api(`${base}/releases`, { method: 'POST', fields: [
+        '-f', `tag_name=${tag}`, '-f', `target_commitish=${sha}`, '-f', `name=${tag}`,
+        '-F', 'draft=true', '-F', 'prerelease=false', '-F', `body=@${notesFile}`,
+      ] });
+      if (!Number.isSafeInteger(existing?.id) || !existing.draft || existing.tag_name !== tag || existing.prerelease || existing.target_commitish?.toLowerCase() !== sha) {
+        throw new Error(`The created draft could not be verified (id=${existing?.id}, draft=${existing?.draft}, target=${existing?.target_commitish})`);
+      }
     }
     if (!hasAsset(existing)) {
       if (existing.assets?.some((file) => file.name === asset)) throw new Error(`Draft ${tag} has an incomplete ZIP asset; refusing to overwrite it`);
