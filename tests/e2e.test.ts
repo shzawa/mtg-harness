@@ -14,6 +14,31 @@ const fixture = `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><title>Meet guard fixture</title></head>
 <body><button id="interact">Interact with this page</button></body></html>`;
 const eventTimeout = 5_000;
+function prejoinFixture(language: 'ja' | 'en', muted = false): string {
+  const labels =
+    language === 'ja'
+      ? [
+          ['マイクをオフにする', 'マイクをオンにする'],
+          ['カメラをオフにする', 'カメラをオンにする'],
+        ]
+      : [
+          ['Turn off microphone', 'Turn on microphone'],
+          ['Turn off camera', 'Turn on camera'],
+        ];
+  return fixture.replace(
+    '</body>',
+    `${labels
+      .map(
+        ([on, off], index) =>
+          `<button id="device-${index}" aria-label="${muted ? off : on}" data-clicks="0"
+      onclick="this.dataset.clicks = Number(this.dataset.clicks) + 1;
+        this.setAttribute('aria-label', this.getAttribute('aria-label') === '${on}' ? '${off}' : '${on}')">Device</button>`,
+      )
+      .join(
+        '',
+      )}<button id="join">${language === 'ja' ? '今すぐ参加' : 'Ask to join'}</button></body>`,
+  );
+}
 let context: BrowserContext | undefined;
 let profilePath: string | undefined;
 let keeperPage: Page | undefined;
@@ -131,6 +156,78 @@ describe('MTG Harness built Chrome extension', { concurrent: false }, () => {
     await closeWithConfirmation(page, 'dismiss');
     await closeWithConfirmation(page, 'accept');
   }, 15_000);
+
+  it('mutes the microphone and camera before joining in Japanese and English', async () => {
+    for (const language of ['ja', 'en'] as const) {
+      const page = await openPage('https://meet.google.com/meet/prejoin', {
+        html: prejoinFixture(language),
+      });
+      for (const index of [0, 1]) {
+        await expect
+          .poll(() => page.locator(`#device-${index}`).getAttribute('data-clicks'))
+          .toBe('1');
+      }
+      // The new feature must preserve the existing close protection.
+      await closeWithConfirmation(page, 'accept');
+    }
+  }, 20_000);
+
+  it('leaves already-muted devices and later manual choices alone', async () => {
+    const page = await openPage('https://meet.google.com/meet/muted', {
+      html: prejoinFixture('ja', true),
+    });
+    await page.waitForTimeout(600);
+    for (const index of [0, 1]) {
+      expect(await page.locator(`#device-${index}`).getAttribute('data-clicks')).toBe('0');
+      await page.locator(`#device-${index}`).click();
+    }
+    await page.waitForTimeout(600);
+    for (const index of [0, 1]) {
+      expect(await page.locator(`#device-${index}`).getAttribute('data-clicks')).toBe('1');
+    }
+  });
+
+  it('waits for late controls, ignores hidden and disabled controls, and mutes again on rejoin', async () => {
+    const page = await openPage('https://meet.google.com/meet/late-controls', {
+      html: prejoinFixture('en').replace('id="join"', 'id="join" hidden'),
+    });
+    await page.waitForTimeout(600);
+    expect(await page.locator('#device-0').getAttribute('data-clicks')).toBe('0');
+    await page.evaluate(() => {
+      document.querySelector('#join')?.removeAttribute('hidden');
+      document.querySelector('#device-1')?.setAttribute('disabled', '');
+    });
+    await expect.poll(() => page.locator('#device-0').getAttribute('data-clicks')).toBe('1');
+    expect(await page.locator('#device-1').getAttribute('data-clicks')).toBe('0');
+    await page.evaluate(() => document.querySelector('#device-1')?.removeAttribute('disabled'));
+    await expect.poll(() => page.locator('#device-1').getAttribute('data-clicks')).toBe('1');
+    await page.evaluate(() => {
+      document.querySelector('#join')?.setAttribute('hidden', '');
+      document.body.insertAdjacentHTML(
+        'beforeend',
+        '<button id="leave" aria-label="Leave call">Leave</button>',
+      );
+    });
+    await page.locator('#device-0').click();
+    await page.waitForTimeout(600);
+    expect(await page.locator('#device-0').getAttribute('data-clicks')).toBe('2');
+    await page.evaluate(() => {
+      document.querySelector('#leave')?.remove();
+      document.querySelector('#join')?.removeAttribute('hidden');
+    });
+    await expect.poll(() => page.locator('#device-0').getAttribute('data-clicks')).toBe('3');
+  }, 15_000);
+
+  it('does not mute devices outside the target URL or without a visible join button', async () => {
+    for (const url of [
+      'https://meet.google.com/abc-defg-hij',
+      'https://example.com/meet/example',
+    ]) {
+      const page = await openPage(url, { html: prejoinFixture('en') });
+      await page.waitForTimeout(600);
+      expect(await page.locator('#device-0').getAttribute('data-clicks')).toBe('0');
+    }
+  });
 
   it('also allows canceling reload and cross-document navigation', async () => {
     const url = 'https://meet.google.com/meet/';

@@ -1,10 +1,15 @@
 import { defineContentScript } from 'wxt/utils/define-content-script';
+import { createPrejoinMuter } from '../utils/prejoin';
 
 export default defineContentScript({
   matches: ['https://meet.google.com/*'],
   runAt: 'document_start',
   allFrames: false,
   main(ctx) {
+    const muteBeforeJoining = createPrejoinMuter();
+    muteBeforeJoining();
+    ctx.setInterval(muteBeforeJoining, 250);
+
     ctx.addEventListener(
       window,
       'beforeunload',
