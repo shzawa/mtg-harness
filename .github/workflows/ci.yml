@@ -80,7 +80,6 @@ jobs:
         if: (steps.build-plan.outputs.required == 'true' || steps.release-plan.outputs.release_needed == 'true')
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: (steps.build-plan.outputs.required == 'true' || steps.release-plan.outputs.release_needed == 'true')
-        id: preview
         with:
           name: chrome-extension
           path: .output/chrome-mv3/
@@ -90,9 +89,9 @@ jobs:
       - name: Link extension preview in run summary
         if: (steps.build-plan.outputs.required == 'true' || steps.release-plan.outputs.release_needed == 'true')
         env:
-          PREVIEW_URL: ${{ steps.preview.outputs.artifact-url }}
+          PREVIEW_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}#artifacts
         run: |
-          echo "[Download chrome-extension.zip]($PREVIEW_URL) — extract and load the folder containing manifest.json in chrome://extensions or edge://extensions. Expires after 30 days; GitHub login required." >> "$GITHUB_STEP_SUMMARY"
+          echo "[Open extension artifacts]($PREVIEW_URL) — select chrome-extension to download the ZIP, extract and load the folder containing manifest.json in chrome://extensions or edge://extensions. Expires after 30 days; GitHub login required." >> "$GITHUB_STEP_SUMMARY"
       - name: Summarize skipped extension build
         if: steps.build-plan.outputs.required != 'true' && steps.release-plan.outputs.release_needed != 'true'
         run: echo 'Extension build, E2E and ZIP upload skipped because only documentation or check-only files changed.' >> "$GITHUB_STEP_SUMMARY"
