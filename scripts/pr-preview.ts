@@ -108,14 +108,14 @@ export async function updatePreview(
           '拡張のビルドに影響する変更がないため、ビルド・E2E・ZIP 生成を省略しました。このコミットのプレビューはありません。';
       } else
         download = [
-          `[ZIP をダウンロード](${runUrl}/artifacts/${artifact.id})`,
+          `ZIP をダウンロード: [${runUrl}/artifacts/${artifact.id}](${runUrl}/artifacts/${artifact.id})`,
           '',
           `保存期間: 30日（期限: ${artifact.expires_at}）。GitHub へのログインとリポジトリの読み取り権限が必要です。`,
           '',
           'ZIP を解凍し、chrome://extensions（Edge は edge://extensions）のデベロッパー モードで、manifest.json が入ったフォルダを読み込んでください。更新時は拡張を再読み込みし、対象の Meet タブも再読み込みしてください。',
         ].join('\n');
     }
-    const regenerate = `[期限切れの場合は再生成](https://github.com/${repository}/actions/workflows/ci.yml) — 「Run workflow」でこの PR のブランチを選んで実行してください。完了後、ダウンロードリンクと期限が自動更新されます（実行にはリポジトリの書き込み権限が必要です）。`;
+    const regenerate = `期限切れの場合は再生成: [https://github.com/${repository}/actions/workflows/ci.yml](https://github.com/${repository}/actions/workflows/ci.yml) — 「Run workflow」でこの PR のブランチを選んで実行してください。完了後、ダウンロードリンクと期限が自動更新されます（実行にはリポジトリの書き込み権限が必要です）。`;
     const section = `### 拡張プレビュー\n\n${download}\n\n${regenerate}\n\n対象コミット: \`${run.head_sha}\` · [CI の実行結果](${runUrl})`;
     // Re-read before writing to preserve recent user edits and skip newly pushed commits.
     const current = (await api(path)) as PullRequest;
