@@ -53,7 +53,11 @@ export async function updatePreview(
   repository: string,
   api: PreviewApi,
 ): Promise<void> {
-  if (run.event !== 'pull_request' || run.repository.full_name !== repository) return;
+  if (
+    !['pull_request', 'workflow_dispatch'].includes(run.event) ||
+    run.repository.full_name !== repository
+  )
+    return;
   const root = `/repos/${repository}`;
   const runUrl = `https://github.com/${repository}/actions/runs/${run.id}`;
   // workflow_run.pull_requests can be empty for fork PRs.
@@ -73,9 +77,14 @@ export async function updatePreview(
 
     // Ignore delayed completions/re-runs of older runs for the same commit.
     const { workflow_runs: runs } = (await api(
-      `${root}/actions/workflows/ci.yml/runs?event=pull_request&head_sha=${run.head_sha}&per_page=100`,
-    )) as { workflow_runs: { id: number }[] };
-    if (runs.some((other) => other.id > run.id)) continue;
+      `${root}/actions/workflows/ci.yml/runs?head_sha=${run.head_sha}&per_page=100`,
+    )) as { workflow_runs: { id: number; event: string }[] };
+    if (
+      runs.some(
+        (other) => other.id > run.id && ['pull_request', 'workflow_dispatch'].includes(other.event),
+      )
+    )
+      continue;
 
     let download = `最新の CI は ${run.conclusion} です。プレビューは提供していません。`;
     if (run.conclusion === 'success') {
@@ -99,14 +108,15 @@ export async function updatePreview(
           '拡張のビルドに影響する変更がないため、ビルド・E2E・ZIP 生成を省略しました。このコミットのプレビューはありません。';
       } else
         download = [
-          `[chrome-extension.zip をダウンロード](${runUrl}/artifacts/${artifact.id})`,
+          `[ZIP をダウンロード](${runUrl}/artifacts/${artifact.id})`,
           '',
           `保存期間: 30日（期限: ${artifact.expires_at}）。GitHub へのログインとリポジトリの読み取り権限が必要です。`,
           '',
           'ZIP を解凍し、chrome://extensions（Edge は edge://extensions）のデベロッパー モードで、manifest.json が入ったフォルダを読み込んでください。更新時は拡張を再読み込みし、対象の Meet タブも再読み込みしてください。',
         ].join('\n');
     }
-    const section = `### 拡張プレビュー\n\n${download}\n\n対象コミット: \`${run.head_sha}\` · [CI の実行結果](${runUrl})`;
+    const regenerate = `[期限切れの場合は再生成](https://github.com/${repository}/actions/workflows/ci.yml) — 「Run workflow」でこの PR のブランチを選んで実行してください。完了後、ダウンロードリンクと期限が自動更新されます（実行にはリポジトリの書き込み権限が必要です）。`;
+    const section = `### 拡張プレビュー\n\n${download}\n\n${regenerate}\n\n対象コミット: \`${run.head_sha}\` · [CI の実行結果](${runUrl})`;
     // Re-read before writing to preserve recent user edits and skip newly pushed commits.
     const current = (await api(path)) as PullRequest;
     if (current.state !== 'open' || current.head.sha !== run.head_sha) continue;
