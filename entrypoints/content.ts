@@ -1,3 +1,4 @@
+import { createChatFallback } from '../utils/chat';
 import { defineContentScript } from 'wxt/utils/define-content-script';
 
 export default defineContentScript({
@@ -37,5 +38,10 @@ export default defineContentScript({
       },
       { capture: true },
     );
+
+    const chat = createChatFallback();
+    chat.update();
+    ctx.setInterval(chat.update, 250);
+    ctx.onInvalidated(chat.remove);
   },
 });
