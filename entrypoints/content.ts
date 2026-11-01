@@ -1,16 +1,11 @@
-import { defineContentScript } from 'wxt/utils/define-content-script';
 import { createChatFallback } from '../utils/chat';
+import { defineContentScript } from 'wxt/utils/define-content-script';
 
 export default defineContentScript({
   matches: ['https://meet.google.com/*'],
   runAt: 'document_start',
   allFrames: false,
   main(ctx) {
-    const chat = createChatFallback();
-    chat.update();
-    ctx.setInterval(chat.update, 250);
-    ctx.onInvalidated(chat.remove);
-
     ctx.addEventListener(
       window,
       'beforeunload',
@@ -43,5 +38,10 @@ export default defineContentScript({
       },
       { capture: true },
     );
+
+    const chat = createChatFallback();
+    chat.update();
+    ctx.setInterval(chat.update, 250);
+    ctx.onInvalidated(chat.remove);
   },
 });
