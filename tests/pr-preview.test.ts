@@ -65,9 +65,11 @@ test('adds a downloadable preview while preserving the description, including fo
   expect(state.updates).toHaveLength(1);
   expect(state.updates[0]).toContain('Original description\n\n<!-- mtg-harness-preview:start -->');
   expect(state.updates[0]).toContain('https://github.com/owner/repo/actions/runs/42/artifacts/123');
-  expect(state.updates[0]).toContain('[ZIP をダウンロード]');
   expect(state.updates[0]).toContain(
-    '[期限切れの場合は再生成](https://github.com/owner/repo/actions/workflows/ci.yml)',
+    'ZIP をダウンロード: [https://github.com/owner/repo/actions/runs/42/artifacts/123](https://github.com/owner/repo/actions/runs/42/artifacts/123)',
+  );
+  expect(state.updates[0]).toContain(
+    '期限切れの場合は再生成: [https://github.com/owner/repo/actions/workflows/ci.yml](https://github.com/owner/repo/actions/workflows/ci.yml)',
   );
   expect(state.updates[0]).toContain('Run workflow');
   expect(state.updates[0]).toContain(sha);
@@ -158,7 +160,9 @@ test('updates the matching PR after a manual regeneration', async () => {
   state.pr.head.repo.full_name = repository;
   await updatePreview(run, repository, api);
   expect(state.updates).toHaveLength(1);
-  expect(state.updates[0]).toContain('[ZIP をダウンロード]');
+  expect(state.updates[0]).toContain(
+    'ZIP をダウンロード: [https://github.com/owner/repo/actions/runs/42/artifacts/123](https://github.com/owner/repo/actions/runs/42/artifacts/123)',
+  );
   expect(api).toHaveBeenCalledWith(`/repos/${repository}/commits/${sha}/pulls?per_page=100`);
 });
 
