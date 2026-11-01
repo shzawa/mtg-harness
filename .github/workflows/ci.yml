@@ -29,12 +29,16 @@ jobs:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           persist-credentials: false
+          fetch-depth: 0
       - name: Install pinned toolchain
         env:
           MISE_GITHUB_TOKEN: ${{ github.token }}
         run: |
           ./bin/mise install --locked
           ./bin/mise env --paths >> "$GITHUB_PATH"
+      - name: Plan extension build
+        id: build-plan
+        run: node scripts/build-plan.ts >> "$GITHUB_OUTPUT"
       - run: pnpm install --frozen-lockfile
       - name: Verify full action versions against upstream tags
         env:
@@ -48,8 +52,14 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: node scripts/release.ts --check-release >> "$GITHUB_OUTPUT"
       - name: Check project and prepare Chromium
+        env:
+          BUILD_REQUIRED: ${{ steps.build-plan.outputs.required == 'true' || steps.release-plan.outputs.release_needed == 'true' }}
         shell: bash
         run: |
+          if [[ "$BUILD_REQUIRED" != "true" ]]; then
+            pnpm check
+            exit
+          fi
           pnpm check &
           checks_pid=$!
           pnpm test:e2e:deps &
@@ -61,16 +71,33 @@ jobs:
             if ! wait "$ci_pid"; then ci_status=1; fi
           done
           exit "$ci_status"
-      - run: pnpm zip
+      - name: Build extension ZIP
+        if: (steps.build-plan.outputs.required == 'true' || steps.release-plan.outputs.release_needed == 'true')
+        run: pnpm zip
       - run: pnpm license:check
+        if: (steps.build-plan.outputs.required == 'true' || steps.release-plan.outputs.release_needed == 'true')
       - run: pnpm test:e2e
+        if: (steps.build-plan.outputs.required == 'true' || steps.release-plan.outputs.release_needed == 'true')
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: (steps.build-plan.outputs.required == 'true' || steps.release-plan.outputs.release_needed == 'true')
+        id: preview
         with:
           name: chrome-extension
           path: .output/chrome-mv3/
+          retention-days: 30
           include-hidden-files: true
           if-no-files-found: error
+      - name: Link extension preview in run summary
+        if: (steps.build-plan.outputs.required == 'true' || steps.release-plan.outputs.release_needed == 'true')
+        env:
+          PREVIEW_URL: ${{ steps.preview.outputs.artifact-url }}
+        run: |
+          echo "[Download chrome-extension.zip]($PREVIEW_URL) — extract and load the folder containing manifest.json in chrome://extensions or edge://extensions. Expires after 30 days; GitHub login required." >> "$GITHUB_STEP_SUMMARY"
+      - name: Summarize skipped extension build
+        if: steps.build-plan.outputs.required != 'true' && steps.release-plan.outputs.release_needed != 'true'
+        run: echo 'Extension build, E2E and ZIP upload skipped because only documentation or check-only files changed.' >> "$GITHUB_STEP_SUMMARY"
       - name: Save tested release ZIP
+        if: (steps.build-plan.outputs.required == 'true' || steps.release-plan.outputs.release_needed == 'true')
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: release-package
