@@ -36,7 +36,8 @@ function fixture() {
     }
     if (path.endsWith('/pulls/7')) return state.pr;
     if (path.includes('/commits/')) return [{ number: 7 }];
-    if (path.includes('/workflows/')) return { workflow_runs: [{ id: state.latestRun }] };
+    if (path.includes('/workflows/'))
+      return { workflow_runs: [{ id: state.latestRun, event: run.event }] };
     if (path.includes('/jobs?'))
       return {
         jobs: [
@@ -64,6 +65,11 @@ test('adds a downloadable preview while preserving the description, including fo
   expect(state.updates).toHaveLength(1);
   expect(state.updates[0]).toContain('Original description\n\n<!-- mtg-harness-preview:start -->');
   expect(state.updates[0]).toContain('https://github.com/owner/repo/actions/runs/42/artifacts/123');
+  expect(state.updates[0]).toContain('[ZIP をダウンロード]');
+  expect(state.updates[0]).toContain(
+    '[期限切れの場合は再生成](https://github.com/owner/repo/actions/workflows/ci.yml)',
+  );
+  expect(state.updates[0]).toContain('Run workflow');
   expect(state.updates[0]).toContain(sha);
   expect(state.updates[0]).toContain('2026-12-01T00:00:00Z');
   expect(api).toHaveBeenCalledWith('/repos/owner/repo/pulls/7', { body: state.updates[0] });
@@ -142,4 +148,26 @@ test('reports intentional build skip instead of retaining a previous download', 
   await updatePreview(run, repository, api);
   expect(state.updates[0]).toContain('省略しました');
   expect(state.updates[0]).not.toContain('old download');
+});
+
+test('updates the matching PR after a manual regeneration', async () => {
+  const { run, state, api } = fixture();
+  run.event = 'workflow_dispatch';
+  run.pull_requests = [];
+  run.head_repository.full_name = repository;
+  state.pr.head.repo.full_name = repository;
+  await updatePreview(run, repository, api);
+  expect(state.updates).toHaveLength(1);
+  expect(state.updates[0]).toContain('[ZIP をダウンロード]');
+  expect(api).toHaveBeenCalledWith(`/repos/${repository}/commits/${sha}/pulls?per_page=100`);
+});
+
+test('does not overwrite a newer manual regeneration with an older PR run', async () => {
+  const { run, state, api } = fixture();
+  const latestManualApi: PreviewApi = (path, body) =>
+    path.includes('/workflows/')
+      ? Promise.resolve({ workflow_runs: [{ id: 43, event: 'workflow_dispatch' }] })
+      : api(path, body);
+  await updatePreview(run, repository, latestManualApi);
+  expect(state.updates).toEqual([]);
 });
