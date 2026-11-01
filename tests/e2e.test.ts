@@ -32,10 +32,15 @@ let keeperPage: Page | undefined;
 
 async function openPage(
   url: string,
-  { interact = true, html }: { interact?: boolean; html?: string } = {},
+  {
+    interact = true,
+    html,
+    viewport,
+  }: { interact?: boolean; html?: string; viewport?: { width: number; height: number } } = {},
 ): Promise<Page> {
   if (!context) throw new Error('The test browser context has not been initialized');
   const page = await context.newPage();
+  if (viewport) await page.setViewportSize(viewport);
   if (html !== undefined) {
     await page.route('https://**/*', (route) =>
       route.fulfill({ contentType: 'text/html', body: html }),
@@ -296,6 +301,64 @@ describe('MTG Harness built Chrome extension', { concurrent: false }, () => {
     await expect.poll(() => page.locator('#mtg-harness-chat').count()).toBe(0);
   });
 
+  it('opens and closes chat when responsive rendering removes the native button, including joining narrow', async () => {
+    const html = chatFixture('ja', false).replace(
+      '</body>',
+      `<script>
+      const toolbar = document.querySelector('#toolbar');
+      const original = toolbar.innerHTML;
+      function renderToolbar() { toolbar.innerHTML = innerWidth < 700 ? '' : original; }
+      addEventListener('resize', renderToolbar);
+      renderToolbar();
+      document.addEventListener('keydown', event => {
+        if (event.key !== 'c' || event.code !== 'KeyC' || event.keyCode !== 67 || !event.ctrlKey ||
+            event.metaKey !== ${process.platform === 'darwin'} || event.altKey !== ${process.platform !== 'darwin'}) return;
+        document.body.dataset.shortcutTarget = event.target.tagName;
+        const panel = document.querySelector('#chat-panel');
+        panel.hidden = !panel.hidden;
+        document.body.dataset.shortcuts = Number(document.body.dataset.shortcuts || 0) + 1;
+      });
+      </script></body>`,
+    );
+    const page = await openPage('https://meet.google.com/meet/removed-chat', { html });
+    await expect.poll(() => page.locator('#mtg-harness-chat').count()).toBe(0);
+    await page.setViewportSize({ width: 580, height: 720 });
+    await expect.poll(() => page.locator('#native-chat').count()).toBe(0);
+    const button = page.locator('#mtg-harness-chat button');
+    await button.click();
+    expect(await page.locator('#chat-panel').isVisible()).toBe(true);
+    // Keep the composer focused until the fallback takes focus; the synthetic
+    // shortcut must be delivered from body rather than an editable element.
+    await page.locator('#chat-panel').evaluate((panel) => {
+      panel.innerHTML = '<input id="composer" value="draft">';
+    });
+    await page.locator('#composer').focus();
+    await button.click();
+    expect(await page.locator('#chat-panel').isVisible()).toBe(false);
+    expect(await page.locator('#composer').inputValue()).toBe('draft');
+    expect(await page.locator('body').getAttribute('data-shortcut-target')).toBe('BODY');
+    await button.focus();
+    await page.keyboard.press('Enter');
+    expect(await page.locator('#chat-panel').isVisible()).toBe(true);
+    await page.keyboard.press('Space');
+    expect(await page.locator('#chat-panel').isVisible()).toBe(false);
+    expect(await page.locator('body').getAttribute('data-shortcuts')).toBe('4');
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await expect.poll(() => page.locator('#native-chat').count()).toBe(1);
+    await expect.poll(() => page.locator('#mtg-harness-chat').count()).toBe(0);
+    await closeWithConfirmation(page, 'accept');
+
+    const narrow = await openPage('https://meet.google.com/meet/joined-narrow', {
+      html,
+      viewport: { width: 580, height: 720 },
+    });
+    await expect.poll(() => narrow.locator('#native-chat').count()).toBe(0);
+    await narrow.locator('#mtg-harness-chat button').click();
+    expect(await narrow.locator('#chat-panel').isVisible()).toBe(true);
+    await narrow.locator('#leave').evaluate((leave) => leave.remove());
+    await expect.poll(() => narrow.locator('#mtg-harness-chat').count()).toBe(0);
+  });
+
   it('handles hidden ancestors, transparent controls, and offscreen controls', async () => {
     for (const style of ['visibility:hidden', 'opacity:0', 'position:fixed;left:-1000px']) {
       const page = await openPage('https://meet.google.com/meet/hidden-chat', {
@@ -323,7 +386,7 @@ describe('MTG Harness built Chrome extension', { concurrent: false }, () => {
     await page.waitForTimeout(600);
     expect(await page.locator('#mtg-harness-chat').count()).toBe(1);
     await page.evaluate(() => document.querySelector('#native-chat')?.remove());
-    await expect.poll(() => page.locator('#mtg-harness-chat').count()).toBe(0);
+    await expect.poll(() => page.locator('#mtg-harness-chat').count()).toBe(1);
   });
 
   it('does not offer unavailable chat controls, prejoin controls, or unrelated pages', async () => {

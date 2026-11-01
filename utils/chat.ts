@@ -15,6 +15,27 @@ function isVisible(button: HTMLElement): boolean {
   return rect.bottom > 0 && rect.right > 0 && rect.top < innerHeight && rect.left < innerWidth;
 }
 
+function toggleChatShortcut(): void {
+  // Meet's documented chat shortcut works even when its responsive toolbar
+  // removes the native chat button. Dispatch from the page body, not our shadow
+  // button or an editable chat field.
+  const mac = /Mac|iPhone|iPad/.test(navigator.platform);
+  const options: KeyboardEventInit = {
+    key: 'c',
+    code: 'KeyC',
+    keyCode: 67,
+    which: 67,
+    ctrlKey: true,
+    metaKey: mac,
+    altKey: !mac,
+    bubbles: true,
+    cancelable: true,
+    composed: true,
+  };
+  document.body.dispatchEvent(new KeyboardEvent('keydown', options));
+  document.body.dispatchEvent(new KeyboardEvent('keyup', options));
+}
+
 export function createChatFallback(): { update: () => void; remove: () => void } {
   let host: HTMLDivElement | undefined;
 
@@ -23,19 +44,25 @@ export function createChatFallback(): { update: () => void; remove: () => void }
     host = undefined;
   };
 
-  const target = () => {
+  const fallbackAction = () => {
     if (!location.pathname.startsWith('/meet/')) return undefined;
     const buttons = controls();
-    if (!buttons.some((button) => hasLabel(button, leaveLabel))) return undefined;
+    if (!buttons.some((button) => hasLabel(button, leaveLabel) && isVisible(button)))
+      return undefined;
     const candidates = buttons.filter((button) => hasLabel(button, chatLabel));
     // Prefer any visible native control over the extension, including a disabled
     // one. Never expose a hidden duplicate of an available or disabled control.
-    if (candidates.some(isVisible)) return undefined;
-    return candidates.find((button) => !button.matches(':disabled, [aria-disabled="true"]'));
+    if (
+      candidates.some(
+        (button) => isVisible(button) || button.matches(':disabled, [aria-disabled="true"]'),
+      )
+    )
+      return undefined;
+    return { native: candidates[0] };
   };
 
   const update = () => {
-    if (!document.body || !target()) {
+    if (!document.body || !fallbackAction()) {
       remove();
       return;
     }
@@ -43,7 +70,7 @@ export function createChatFallback(): { update: () => void; remove: () => void }
 
     host = document.createElement('div');
     host.id = 'mtg-harness-chat';
-    host.style.cssText = 'position:fixed;right:16px;bottom:88px;z-index:2147483647;';
+    host.style.cssText = 'position:fixed;left:16px;bottom:88px;z-index:2147483647;';
     const shadow = host.attachShadow({ mode: 'open' });
     const style = document.createElement('style');
     style.textContent = `
@@ -64,12 +91,13 @@ export function createChatFallback(): { update: () => void; remove: () => void }
     button.title = 'MTG Harness';
     button.addEventListener('click', () => {
       // Resolve the current control on every click: Meet can replace its toolbar.
-      const native = target();
-      if (!native) {
+      const action = fallbackAction();
+      if (!action) {
         update();
         return;
       }
-      native.click();
+      if (action.native) action.native.click();
+      else toggleChatShortcut();
     });
     shadow.append(style, button);
     document.body.append(host);
