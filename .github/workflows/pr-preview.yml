@@ -1,0 +1,37 @@
+name: PR preview link
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+
+permissions:
+  contents: read
+  actions: read
+  pull-requests: write
+
+concurrency:
+  group: pr-preview-${{ github.event.workflow_run.head_repository.full_name }}-${{ github.event.workflow_run.head_branch }}
+  queue: max
+
+jobs:
+  link:
+    if: github.event.workflow_run.event == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # Only execute trusted default-branch code; never checkout or execute the PR/artifact.
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Install pinned toolchain
+        env:
+          MISE_GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          ./bin/mise install --locked
+          ./bin/mise env --paths >> "$GITHUB_PATH"
+      - name: Update preview section in PR description
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/pr-preview.ts

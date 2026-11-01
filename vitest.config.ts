@@ -11,6 +11,8 @@ export default defineConfig({
             'tests/release.test.ts',
             'tests/licenses.test.ts',
             'tests/check-actions.test.ts',
+            'tests/pr-preview.test.ts',
+            'tests/build-plan.test.ts',
           ],
         },
       },
