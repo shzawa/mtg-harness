@@ -14,6 +14,18 @@ const fixture = `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><title>Meet guard fixture</title></head>
 <body><button id="interact">Interact with this page</button></body></html>`;
 const eventTimeout = 5_000;
+function chatFixture(language: 'ja' | 'en' = 'en', hidden = true): string {
+  return fixture.replace('<html lang="en">', `<html lang="${language}">`).replace(
+    '</body>',
+    `
+    <button id="leave" aria-label="${language === 'ja' ? '通話から退出' : 'Leave call'}">Leave</button>
+    <div id="toolbar" ${hidden ? 'hidden' : ''}>
+      <button id="native-chat" aria-label="${language === 'ja' ? '全員とチャット' : 'Chat with everyone'}"
+        data-clicks="0" onclick="this.dataset.clicks = Number(this.dataset.clicks) + 1;
+          document.querySelector('#chat-panel').hidden = !document.querySelector('#chat-panel').hidden">Chat</button>
+    </div><div id="chat-panel" hidden>Meeting chat</div></body>`,
+  );
+}
 let context: BrowserContext | undefined;
 let profilePath: string | undefined;
 let keeperPage: Page | undefined;
@@ -131,6 +143,105 @@ describe('MTG Harness built Chrome extension', { concurrent: false }, () => {
     await closeWithConfirmation(page, 'dismiss');
     await closeWithConfirmation(page, 'accept');
   }, 15_000);
+
+  it('provides a keyboard-accessible replacement for a hidden native chat button in Japanese and English', async () => {
+    for (const language of ['ja', 'en'] as const) {
+      const page = await openPage('https://meet.google.com/meet/chat', {
+        html: chatFixture(language),
+      });
+      const button = page.locator('#mtg-harness-chat button');
+      await button.waitFor();
+      expect(await button.textContent()).toBe(language === 'ja' ? 'チャット' : 'Chat');
+      await button.click();
+      expect(await page.locator('#chat-panel').isVisible()).toBe(true);
+      await button.focus();
+      await page.keyboard.press('Enter');
+      expect(await page.locator('#chat-panel').isVisible()).toBe(false);
+      expect(await page.locator('#native-chat').getAttribute('data-clicks')).toBe('2');
+      await closeWithConfirmation(page, 'accept');
+    }
+  }, 20_000);
+
+  it('shows and removes the replacement when responsive styles hide and restore the native button', async () => {
+    const page = await openPage('https://meet.google.com/meet/responsive-chat', {
+      html: chatFixture('en', false).replace(
+        '</head>',
+        '<style>@media (max-width: 700px) { #toolbar { display: none; } }</style></head>',
+      ),
+    });
+    await page.waitForTimeout(600);
+    expect(await page.locator('#mtg-harness-chat').count()).toBe(0);
+    await page.setViewportSize({ width: 640, height: 720 });
+    await page.locator('#mtg-harness-chat button').click();
+    expect(await page.locator('#chat-panel').isVisible()).toBe(true);
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await expect.poll(() => page.locator('#mtg-harness-chat').count()).toBe(0);
+  });
+
+  it('handles hidden ancestors, transparent controls, and offscreen controls', async () => {
+    for (const style of ['visibility:hidden', 'opacity:0', 'position:fixed;left:-1000px']) {
+      const page = await openPage('https://meet.google.com/meet/hidden-chat', {
+        html: chatFixture('en', false).replace('id="toolbar"', `id="toolbar" style="${style}"`),
+      });
+      await page.locator('#mtg-harness-chat button').click();
+      expect(await page.locator('#native-chat').getAttribute('data-clicks')).toBe('1');
+      await page.close();
+    }
+  });
+
+  it('uses the current native control after replacement and does not duplicate the fallback', async () => {
+    const page = await openPage('https://meet.google.com/meet/replaced-chat', {
+      html: chatFixture(),
+    });
+    const button = page.locator('#mtg-harness-chat button');
+    await button.waitFor();
+    await page.evaluate(() => {
+      const native = document.querySelector('#native-chat');
+      if (!native) throw new Error('Missing native chat control');
+      native.replaceWith(native.cloneNode(true));
+    });
+    await button.click();
+    expect(await page.locator('#native-chat').getAttribute('data-clicks')).toBe('1');
+    await page.waitForTimeout(600);
+    expect(await page.locator('#mtg-harness-chat').count()).toBe(1);
+    await page.evaluate(() => document.querySelector('#native-chat')?.remove());
+    await expect.poll(() => page.locator('#mtg-harness-chat').count()).toBe(0);
+  });
+
+  it('does not offer unavailable chat controls, prejoin controls, or unrelated pages', async () => {
+    for (const html of [
+      chatFixture().replace('id="native-chat"', 'id="native-chat" disabled'),
+      chatFixture().replace('id="native-chat"', 'id="native-chat" aria-disabled="true"'),
+      chatFixture().replace('aria-label="Leave call"', 'aria-label="Join now"'),
+    ]) {
+      const page = await openPage('https://meet.google.com/meet/unavailable-chat', { html });
+      await page.waitForTimeout(600);
+      expect(await page.locator('#mtg-harness-chat').count()).toBe(0);
+      await page.close();
+    }
+    for (const url of [
+      'https://meet.google.com/abc-defg-hij',
+      'https://example.com/meet/example',
+    ]) {
+      const page = await openPage(url, { html: chatFixture() });
+      await page.waitForTimeout(600);
+      expect(await page.locator('#mtg-harness-chat').count()).toBe(0);
+      await page.close();
+    }
+  });
+
+  it('removes the replacement after leaving the call or navigating outside the target URL', async () => {
+    const page = await openPage('https://meet.google.com/meet/leaving-chat', {
+      html: chatFixture(),
+    });
+    await page.locator('#mtg-harness-chat button').waitFor();
+    await page.evaluate(() => history.pushState({}, '', '/outside'));
+    await expect.poll(() => page.locator('#mtg-harness-chat').count()).toBe(0);
+    await page.evaluate(() => history.pushState({}, '', '/meet/rejoined'));
+    await page.locator('#mtg-harness-chat button').waitFor();
+    await page.evaluate(() => document.querySelector('#leave')?.remove());
+    await expect.poll(() => page.locator('#mtg-harness-chat').count()).toBe(0);
+  });
 
   it('also allows canceling reload and cross-document navigation', async () => {
     const url = 'https://meet.google.com/meet/';
