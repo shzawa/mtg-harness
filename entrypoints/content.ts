@@ -1,4 +1,5 @@
 import { defineContentScript } from 'wxt/utils/define-content-script';
+import { createChatFallback } from '../utils/chat';
 import { createPrejoinMuter } from '../utils/prejoin';
 
 export default defineContentScript({
@@ -6,6 +7,11 @@ export default defineContentScript({
   runAt: 'document_start',
   allFrames: false,
   main(ctx) {
+    const chat = createChatFallback();
+    chat.update();
+    ctx.setInterval(chat.update, 250);
+    ctx.onInvalidated(chat.remove);
+
     const muteBeforeJoining = createPrejoinMuter();
     muteBeforeJoining();
     ctx.setInterval(muteBeforeJoining, 250);
